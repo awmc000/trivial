@@ -52,7 +52,7 @@ class RequestPacketCreationTests(unittest.TestCase):
 class DataPacketCreationTests(unittest.TestCase):
     def test_bad_block_number(self):
         for badNum in [-10, -1, 1000, 2048]:
-            badCall = lambda : main.createDataPacket(-1, bytes(badNum))
+            badCall = lambda : main.createDataPacket(badNum, bytes(badNum))
             self.assertRaises(ValueError, badCall)
 
     def test_no_data_ok(self):
@@ -65,6 +65,36 @@ class DataPacketCreationTests(unittest.TestCase):
             pkt = main.createDataPacket(5, bytes(num))
             exp = b'\x00\x03\x00\x05' + bytes(num)
             self.assertEqual(pkt, exp)
+    
+    def test_encoded_bytes(self):
+        # Chinese characters, full width ！ (not !), then some ascii digits
+        data = bytes('大林和小林是一本很有意思的小说！ 12345678', 'utf8')
+        pkt = main.createDataPacket(2, data)
+        exp = b'\x00\x03\x00\x02' + data
+        self.assertEqual(exp, pkt)
+
+class AckPacketCreationTests(unittest.TestCase):
+    def test_bad_block_number(self):
+        for badNum in [-10, -1, 1000, 2048]:
+            badCall = lambda : main.createAckPacket(badNum)
+            self.assertRaises(ValueError, badCall)
+    
+    def test_ok_block_number(self):
+        for num in [5, 17, 1, 511, 256]:
+            pkt = main.createAckPacket(num)
+            exp = b'\x00\x04' + int(num).to_bytes(2)
+            self.assertEqual(pkt, exp)
+
+class ErrorPacketCreationTests(unittest.TestCase):
+    def test_bad_code(self):
+        badCall = lambda : main.createErrorPacket(int(255).to_bytes(2), 'hella, warld!')
+        self.assertRaises(ValueError, badCall)
+
+    def test_valid_codes(self):
+        for num in range(1, 7+1):
+            err = main.createErrorPacket(num.to_bytes(2))
+            exp = b'\x00\x05' + num.to_bytes(2) + bytes(1)
+            
 
 if __name__ == "__main__":
     unittest.main()

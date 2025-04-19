@@ -17,6 +17,7 @@
     
     main.py: entry point for application
 '''
+import socket
 
 MODES = [
     'netascii',
@@ -92,6 +93,9 @@ def createAckPacket(blockNumber: int):
     '''
     Creates a formatted acknowledgement packet ready to send through UDP.
     '''
+    if blockNumber < 0 or blockNumber >= 512:
+        raise ValueError('Block numbers should be in the range [0, 511]; caller should handle overflow')
+
     ack = Opcodes.ACK
     ack += blockNumber.to_bytes(2)
     
@@ -111,9 +115,35 @@ def createErrorPacket(code: bytes, errorMessage: str = ''):
     '''
     Creates a formatted data packet ready to send through UDP.
     '''
+    
+    if code not in [ x.to_bytes(2) for x in range(0, 7+1) ]:
+        raise ValueError('Error code should be a number in the range [1,7] represnted as 2 bytes.')
+    
     err = Opcodes.ERROR
     err += code
     err += bytes(errorMessage, 'ascii')
     err += bytes(1) # one byte, value is zero
     
     return err
+
+# Should be 69 in prod
+# KNOWN_PORT = 69
+KNOWN_PORT = 11111
+
+class Client():
+    '''
+    TFTP client. Keeps track of connection state such as current block num and packet to retransmit.
+    '''
+    
+    def __init__(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(('localhost', 0))
+        
+        # This is the source port or source TID we will put in datagrams 
+        self.sourcePort = self.sock.getsockname()[1]
+
+    def requestRead(self, address, filename):
+        req = createConnectionPacket('r', filename)
+
+        # Destination port should be 69
+        self.sock.sendto(req, (address, KNOWN_PORT))

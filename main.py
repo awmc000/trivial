@@ -14,7 +14,15 @@
 
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
+    
+    main.py: entry point for application
 '''
+
+MODES = [
+    'netascii',
+    'octet',
+    'mail'
+]
 
 '''
 Opcodes from RFC:
@@ -38,6 +46,9 @@ def createConnectionPacket(type: str, filename: str, mode: str = 'octet'):
     
     if type != 'r' and type != 'w':
         raise ValueError('Type should be "r" or "w".')
+    
+    if mode not in MODES:
+        raise ValueError(f'Mode should be one of {MODES}.')
     
     if type == 'r':
         opcode = Opcodes.READ_REQUEST
@@ -67,6 +78,9 @@ def createDataPacket(blockNumber: int, data: bytes):
     '''
     if len(data) > 512:
         raise ValueError('Data packets\' contents should be strictly [0, 512] bytes in length.')
+    
+    if blockNumber < 0 or blockNumber >= 512:
+        raise ValueError('Block numbers should be in the range [0, 511]; caller should handle overflow')
     
     pkt = Opcodes.DATA
     pkt += blockNumber.to_bytes(2)

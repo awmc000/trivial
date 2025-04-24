@@ -57,20 +57,12 @@ def createConnectionPacket(type: str, filename: str, mode: str = 'octet'):
         opcode = Opcodes.WRITE_REQUEST
     
     # Start with opcode
-    req = opcode
-    
-    # Filename 
-    req += bytes(filename, 'ascii')
-    
-    # Empty byte (arg is 1 because we want it 1 byte long)
-    req += bytes(1)
-    
-    # Mode string
-    req += bytes(mode, 'ascii')
-    
-    # Empty byte
-    req += bytes(1)
-    
+    req = opcode + \
+        bytes(filename, 'ascii') + \
+        bytes(1) + \
+        bytes(mode, 'ascii') + \
+        bytes(1)
+
     return req
 
 def createDataPacket(blockNumber: int, data: bytes):
@@ -126,7 +118,9 @@ def createErrorPacket(code: bytes, errorMessage: str = ''):
     
     return err
 
-# Should be 69 in prod
+# The "known port" the server is initially contacted on.
+# The RFC specifies 69, but if we use a port above 1000
+# then we don't need admin permissions.
 # KNOWN_PORT = 69
 KNOWN_PORT = 11111
 
@@ -141,9 +135,29 @@ class Client():
         
         # This is the source port or source TID we will put in datagrams 
         self.sourcePort = self.sock.getsockname()[1]
+        
+    def __del__(self):
+        self.sock.close()
 
-    def requestRead(self, address, filename):
-        req = createConnectionPacket('r', filename)
+    def requestConnection(self, type, address, filename):
+        req = createConnectionPacket(type, filename)
 
-        # Destination port should be 69
         self.sock.sendto(req, (address, KNOWN_PORT))
+        
+        # We will be expecting ACK for block
+        self.blockNum = 0
+        
+        # Block for ACK 0
+        payload, (serverAddress, serverPort) = self.sock.recvfrom(1024)
+                
+        # Now we know the destination port.
+        self.destinationPort = serverPort
+        
+    def requestRead(self, address, filename):
+        self.requestConnection('r', address, filename)
+    
+    def requestWrite(self, address, filename):
+        self.requestConnection('w', address, filename)
+    
+    def receive(self):
+        pass

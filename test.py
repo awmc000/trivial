@@ -17,8 +17,14 @@
     
     test.py: unit tests for all parts of the program
 '''
+# Modules from std library
 import unittest
+import socket
+from threading import Thread
+
+# Modules from this project
 import main
+
 
 class RequestPacketCreationTests(unittest.TestCase):
     def test_bad_request_type(self):
@@ -95,6 +101,38 @@ class ErrorPacketCreationTests(unittest.TestCase):
             err = main.createErrorPacket(num.to_bytes(2))
             exp = b'\x00\x05' + num.to_bytes(2) + bytes(1)
             
+class ClientBehaviourTests(unittest.TestCase):
+    def test_create_bind(self):
+        client = main.Client()
+        
+        self.assertIsNotNone(client.sourcePort)
+        self.assertEqual(client.sourcePort, client.sock.getsockname()[1])
+    
+    def test_read_write_request(self):
+        client = main.Client()
+        
+        # Set up socket to stand in for server
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(('0.0.0.0', 11111))
+        
+        # Make a read request, put it in a thread so it can block for our response
+        t = Thread(target = client.requestRead, args=['0.0.0.0', 'doc.txt'])
+        t.start()
+        payload, (client_address, client_port) = srv.recvfrom(1024)
+        
+        # Verify what was received by the server
+        self.assertEqual(main.createConnectionPacket('r', 'doc.txt'), payload)
+                
+        # Send acknowledgment        
+        srv.sendto(main.createAckPacket(0), (client_address, client_port))
+
+        # Wait for client thread to finish, so we can check state of client
+        t.join()
+        
+        self.assertIsNotNone(client.destinationPort)
+        
+        srv.close()
+        
 
 if __name__ == "__main__":
     unittest.main()

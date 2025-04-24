@@ -108,7 +108,7 @@ class ClientBehaviourTests(unittest.TestCase):
         self.assertIsNotNone(client.sourcePort)
         self.assertEqual(client.sourcePort, client.sock.getsockname()[1])
     
-    def test_read_write_request(self):
+    def test_write_request(self):
         client = main.Client()
         
         # Set up socket to stand in for server
@@ -116,20 +116,25 @@ class ClientBehaviourTests(unittest.TestCase):
         srv.bind(('0.0.0.0', 11111))
         
         # Make a read request, put it in a thread so it can block for our response
-        t = Thread(target = client.requestRead, args=['0.0.0.0', 'doc.txt'])
+        t = Thread(target = client.requestWrite, args=['0.0.0.0', 'doc.txt'])
         t.start()
         payload, (client_address, client_port) = srv.recvfrom(1024)
         
         # Verify what was received by the server
-        self.assertEqual(main.createConnectionPacket('r', 'doc.txt'), payload)
-                
-        # Send acknowledgment        
+        self.assertEqual(main.createConnectionPacket('w', 'doc.txt'), payload)
+
+        # Send the ACK from a different socket
+        srv.close()
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(('0.0.0.0', 12222))
+
+        # Send acknowledgment
         srv.sendto(main.createAckPacket(0), (client_address, client_port))
 
         # Wait for client thread to finish, so we can check state of client
         t.join()
         
-        self.assertIsNotNone(client.destinationPort)
+        self.assertEqual(client.destinationPort, 12222)
         
         srv.close()
         

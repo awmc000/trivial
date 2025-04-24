@@ -143,8 +143,15 @@ class Client():
         req = createConnectionPacket(type, filename)
 
         self.sock.sendto(req, (address, KNOWN_PORT))
+        self.destinationAddress = address
         
-        # We will be expecting ACK for block
+    def requestRead(self, address, filename):
+        self.requestConnection('r', address, filename)
+    
+    def requestWrite(self, address, filename):
+        self.requestConnection('w', address, filename)
+        
+        # We will be expecting ACK for block 0
         self.blockNum = 0
         
         # Block for ACK 0
@@ -152,12 +159,36 @@ class Client():
                 
         # Now we know the destination port.
         self.destinationPort = serverPort
-        
-    def requestRead(self, address, filename):
-        self.requestConnection('r', address, filename)
-    
-    def requestWrite(self, address, filename):
-        self.requestConnection('w', address, filename)
     
     def receive(self):
-        pass
+        
+        dest = (self.destinationAddress, self.destinationPort)
+        
+        while True:
+            # Receive packet
+            packet, (serverAddress, serverPort) = self.sock.recvfrom(1024)
+            self.blockNum += 1
+            
+            # TODO: Send error if packet has wrong source port!
+            # TODO: Any other error handling
+            
+            # Acknowledge packet
+            ack = createAckPacket(self.blockNum)
+            self.sock.sendto(ack, dest)
+    
+    
+    def getFile(self, address, filename):
+        '''
+        Handles entire process of getting a file from a remote host with TFTP.
+        One of two entry points to the client, the other being sendFile.
+        '''
+        
+        # Make a read request
+        self.requestRead(address, filename)
+        
+        # Receive the file buffer
+        fileBuffer = self.receive()
+        
+        # Save the file
+        with open(filename, '+w') as file:
+            file.write(fileBuffer)

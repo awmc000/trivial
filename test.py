@@ -149,11 +149,6 @@ class ClientBehaviourTests(unittest.TestCase):
         srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         srv.bind(('0.0.0.0', 11111))
 
-        # Destination addr, port  would usually be set by `requestWrite`.
-        # We have to set it manually here
-        client.destinationAddress = '127.0.0.1'
-        client.destinationPort = 11111
-
         # requestWrite would also usually bind blockNum
         client.blockNum = 0
 
@@ -188,13 +183,7 @@ class ClientBehaviourTests(unittest.TestCase):
         Tests client sending RRQ and server replying with first packet.
         '''
         client = main.Client()
-        
-        # TODO: These should be set by the client itself!
-        client.destinationAddress = '127.0.0.1'
-        client.destinationPort = 11111
-        client.blockNum = 0
 
-        
         # Set up socket to stand in for server
         srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         srv.bind(('0.0.0.0', 11111))

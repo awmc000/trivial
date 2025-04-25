@@ -163,7 +163,26 @@ class Client():
     def receive(self):
                 
         buffer = bytes(0)
+        self.blockNum = 0
+
+        # Receive initial packet
+        packet, (serverAddress, serverPort) = self.sock.recvfrom(1024)
+        buffer += packet[4:]
+        self.blockNum += 1
+
+        self.destinationAddress = serverAddress
+        self.destinationPort = serverPort
+
+        # Acknowledge packet
+        ack = createAckPacket(self.blockNum)
+        self.sock.sendto(ack, (serverAddress, serverPort))
+
+
+        # Return now if initial packet is also ending packet
+        if len(packet) < 512:
+            return buffer
         
+        # Else loop until rest are received
         while True:
             # Receive packet
             packet, (serverAddress, serverPort) = self.sock.recvfrom(1024)

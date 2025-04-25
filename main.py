@@ -161,12 +161,17 @@ class Client():
         self.destinationPort = serverPort
     
     def receive(self):
-        
-        dest = (self.destinationAddress, self.destinationPort)
+                
+        buffer = bytes(0)
         
         while True:
             # Receive packet
             packet, (serverAddress, serverPort) = self.sock.recvfrom(1024)
+            
+            if self.destinationPort is None:
+                self.destinationPort = serverPort
+            
+            buffer += packet[4:]
             self.blockNum += 1
                         
             # TODO: Send error if packet has wrong source port!
@@ -174,11 +179,12 @@ class Client():
             
             # Acknowledge packet
             ack = createAckPacket(self.blockNum)
-            self.sock.sendto(ack, dest)
+            self.sock.sendto(ack, (serverAddress, serverPort))
             
             # We are done if the payload size is less than 512 bytes
             if len(packet) < 512:
-                return
+                break
+        return buffer
 
     def getFile(self, address, filename):
         '''
@@ -194,4 +200,4 @@ class Client():
         
         # Save the file
         with open(filename, '+w') as file:
-            file.write(fileBuffer)
+            file.write(str(fileBuffer, encoding='utf8'))

@@ -118,7 +118,7 @@ class ClientBehaviourTests(unittest.TestCase):
         srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         srv.bind(('0.0.0.0', 11111))
         
-        # Make a read request, put it in a thread so it can block for our response
+        # Make a write request, put it in a thread so it can block for our response
         t = Thread(target = client.requestWrite, args=['0.0.0.0', 'doc.txt'])
         t.start()
         payload, (client_address, client_port) = srv.recvfrom(1024)
@@ -130,8 +130,6 @@ class ClientBehaviourTests(unittest.TestCase):
         srv.close()
         srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         srv.bind(('0.0.0.0', 12222))
-
-        # Send acknowledgment
         srv.sendto(main.createAckPacket(0), (client_address, client_port))
 
         # Wait for client thread to finish, so we can check state of client
@@ -189,7 +187,39 @@ class ClientBehaviourTests(unittest.TestCase):
         '''
         Tests client sending RRQ and server replying with first packet.
         '''
-        pass
+        client = main.Client()
+        
+        # TODO: These should be set by the client itself!
+        client.destinationAddress = '127.0.0.1'
+        client.destinationPort = 11111
+        client.blockNum = 0
+
+        
+        # Set up socket to stand in for server
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(('0.0.0.0', 11111))
+        
+        # Make a write request, put it in a thread so it can block for our response
+        t = Thread(target = client.getFile, args=['0.0.0.0', 'doc.txt'])
+        t.start()
+        payload, (client_address, client_port) = srv.recvfrom(1024)
+        
+        # Verify what was received by the server
+        self.assertEqual(main.createConnectionPacket('r', 'doc.txt'), payload)
+
+        # Send one segment from a different socket
+        srv.close()
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(('0.0.0.0', 12222))
+        
+        srv.sendto(main.createDataPacket(1, bytes('Hello, World!', 'utf8')), (client_address, client_port))
+        payload, (client_address, client_port) = srv.recvfrom(1024)
+        
+        # Verify what was received by the server
+        self.assertEqual(main.createAckPacket(1), payload)
+        
+        t.join()
+        srv.close()
 
 if __name__ == "__main__":
     unittest.main()

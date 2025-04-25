@@ -23,87 +23,87 @@ import socket
 from threading import Thread
 
 # Modules from this project
-import main
+import tftp
 
 
 class RequestPacketCreationTests(unittest.TestCase):
     def test_bad_request_type(self):
         # There is no "x" mode, it's either 'r' or 'w'
-        badCall = lambda : main.createConnectionPacket('x', 'x.png')
+        badCall = lambda : tftp.createConnectionPacket('x', 'x.png')
         self.assertRaises(ValueError, badCall)
     
     def test_bad_request_mode(self):
         # There is no unicode mode - this should raise an exception
-        badCall = lambda : main.createConnectionPacket('r', 'x.png', 'unicode')
+        badCall = lambda : tftp.createConnectionPacket('r', 'x.png', 'unicode')
         self.assertRaises(ValueError, badCall)
     
     def test_good_write_requests(self):
-        req = main.createConnectionPacket('w', 'document.txt')
+        req = tftp.createConnectionPacket('w', 'document.txt')
         exp = b'\x00\x02document.txt\x00octet\x00'
         self.assertEqual(req, exp)
         
-        req = main.createConnectionPacket('w', 'image.png', mode='netascii')
+        req = tftp.createConnectionPacket('w', 'image.png', mode='netascii')
         exp = b'\x00\x02image.png\x00netascii\x00'
         self.assertEqual(req, exp)
     
     def test_good_read_requests(self):
-        req = main.createConnectionPacket('r', 'hello.txt')
+        req = tftp.createConnectionPacket('r', 'hello.txt')
         exp = b'\x00\x01hello.txt\x00octet\x00'
         self.assertEqual(req, exp)
         
-        req = main.createConnectionPacket('r', 'world.png', mode='netascii')
+        req = tftp.createConnectionPacket('r', 'world.png', mode='netascii')
         exp = b'\x00\x01world.png\x00netascii\x00'
         self.assertEqual(req, exp)
 
 class DataPacketCreationTests(unittest.TestCase):
     def test_bad_block_number(self):
         for badNum in [-10, -1, 1000, 2048]:
-            badCall = lambda : main.createDataPacket(badNum, bytes(badNum))
+            badCall = lambda : tftp.createDataPacket(badNum, bytes(badNum))
             self.assertRaises(ValueError, badCall)
 
     def test_no_data_ok(self):
-        pkt = main.createDataPacket(5, bytes(0))
+        pkt = tftp.createDataPacket(5, bytes(0))
         exp = b'\x00\x03\x00\x05'
         self.assertEqual(pkt, exp)
     
     def test_ok_sizes(self):
         for num in [512, 5, 17, 1, 511, 256]:
-            pkt = main.createDataPacket(5, bytes(num))
+            pkt = tftp.createDataPacket(5, bytes(num))
             exp = b'\x00\x03\x00\x05' + bytes(num)
             self.assertEqual(pkt, exp)
     
     def test_encoded_bytes(self):
         # Chinese characters, full width ！ (not !), then some ascii digits
         data = bytes('大林和小林是一本很有意思的小说！ 12345678', 'utf8')
-        pkt = main.createDataPacket(2, data)
+        pkt = tftp.createDataPacket(2, data)
         exp = b'\x00\x03\x00\x02' + data
         self.assertEqual(exp, pkt)
 
 class AckPacketCreationTests(unittest.TestCase):
     def test_bad_block_number(self):
         for badNum in [-10, -1, 1000, 2048]:
-            badCall = lambda : main.createAckPacket(badNum)
+            badCall = lambda : tftp.createAckPacket(badNum)
             self.assertRaises(ValueError, badCall)
     
     def test_ok_block_number(self):
         for num in [5, 17, 1, 511, 256]:
-            pkt = main.createAckPacket(num)
+            pkt = tftp.createAckPacket(num)
             exp = b'\x00\x04' + int(num).to_bytes(2)
             self.assertEqual(pkt, exp)
 
 class ErrorPacketCreationTests(unittest.TestCase):
     def test_bad_code(self):
-        badCall = lambda : main.createErrorPacket(int(255).to_bytes(2), 'hella, warld!')
+        badCall = lambda : tftp.createErrorPacket(int(255).to_bytes(2), 'hella, warld!')
         self.assertRaises(ValueError, badCall)
 
     def test_valid_codes(self):
         for num in range(1, 7+1):
-            err = main.createErrorPacket(num.to_bytes(2))
+            err = tftp.createErrorPacket(num.to_bytes(2))
             exp = b'\x00\x05' + num.to_bytes(2) + bytes(1)
             
 class ClientBehaviourTests(unittest.TestCase):
     def test_create_bind(self):
-        client = main.Client()
+        client = tftp.Client()
         
         self.assertIsNotNone(client.sourcePort)
         self.assertEqual(client.sourcePort, client.sock.getsockname()[1])
@@ -112,7 +112,7 @@ class ClientBehaviourTests(unittest.TestCase):
         '''
         Tests client sending WRQ and server replying with ACK.
         '''
-        client = main.Client()
+        client = tftp.Client()
         
         # Set up socket to stand in for server
         srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -124,13 +124,13 @@ class ClientBehaviourTests(unittest.TestCase):
         payload, (client_address, client_port) = srv.recvfrom(1024)
         
         # Verify what was received by the server
-        self.assertEqual(main.createConnectionPacket('w', 'doc.txt'), payload)
+        self.assertEqual(tftp.createConnectionPacket('w', 'doc.txt'), payload)
 
         # Send the ACK from a different socket
         srv.close()
         srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         srv.bind(('0.0.0.0', 12222))
-        srv.sendto(main.createAckPacket(0), (client_address, client_port))
+        srv.sendto(tftp.createAckPacket(0), (client_address, client_port))
 
         # Wait for client thread to finish, so we can check state of client
         t.join()
@@ -143,7 +143,7 @@ class ClientBehaviourTests(unittest.TestCase):
         '''
         Tests ability to receive packets and send acknowledgement.
         '''
-        client = main.Client()
+        client = tftp.Client()
         
         # Set up socket to stand in for server
         srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -182,7 +182,7 @@ class ClientBehaviourTests(unittest.TestCase):
         '''
         Tests client sending RRQ and server replying with first packet.
         '''
-        client = main.Client()
+        client = tftp.Client()
 
         # Set up socket to stand in for server
         srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -194,18 +194,18 @@ class ClientBehaviourTests(unittest.TestCase):
         payload, (client_address, client_port) = srv.recvfrom(1024)
         
         # Verify what was received by the server
-        self.assertEqual(main.createConnectionPacket('r', 'doc.txt'), payload)
+        self.assertEqual(tftp.createConnectionPacket('r', 'doc.txt'), payload)
 
         # Send one segment from a different socket
         srv.close()
         srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         srv.bind(('0.0.0.0', 12222))
         
-        srv.sendto(main.createDataPacket(1, bytes('Hello, World!', 'utf8')), (client_address, client_port))
+        srv.sendto(tftp.createDataPacket(1, bytes('Hello, World!', 'utf8')), (client_address, client_port))
         payload, (client_address, client_port) = srv.recvfrom(1024)
         
         # Verify what was received by the server
-        self.assertEqual(main.createAckPacket(1), payload)
+        self.assertEqual(tftp.createAckPacket(1), payload)
         
         t.join()
         srv.close()

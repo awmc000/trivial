@@ -109,6 +109,9 @@ class ClientBehaviourTests(unittest.TestCase):
         self.assertEqual(client.sourcePort, client.sock.getsockname()[1])
     
     def test_write_request(self):
+        '''
+        Tests client sending WRQ and server replying with ACK.
+        '''
         client = main.Client()
         
         # Set up socket to stand in for server
@@ -137,7 +140,56 @@ class ClientBehaviourTests(unittest.TestCase):
         self.assertEqual(client.destinationPort, 12222)
         
         srv.close()
+
+    def test_receive(self):
+        '''
+        Tests ability to receive packets and send acknowledgement.
+        '''
+        client = main.Client()
         
+        # Set up socket to stand in for server
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(('0.0.0.0', 11111))
+
+        # Destination addr, port  would usually be set by `requestWrite`.
+        # We have to set it manually here
+        client.destinationAddress = '127.0.0.1'
+        client.destinationPort = 11111
+
+        # requestWrite would also usually bind blockNum
+        client.blockNum = 0
+
+        # Create thread where client receives blocks
+        t = Thread(target=client.receive)
+        t.start()
+        
+        # Send 5 blocks, 4 of size 512, and then one of 511 bytes
+        fullMessage = 64 * bytes('honeybee', 'utf8')
+        shortMessage = fullMessage[:511]
+        
+        for i in range(4):
+            # Send a block, receive ACK, check that it is correct
+            srv.sendto(fullMessage, ('127.0.0.1', client.sourcePort))
+            payload, (client_address, client_port) = srv.recvfrom(1024)
+            acknowledged = int.from_bytes(payload[2:])
+            self.assertEqual(acknowledged, i+1)
+            
+        srv.sendto(shortMessage, ('127.0.0.1', client.sourcePort))   
+        payload, (client_address, client_port) = srv.recvfrom(1024)
+        acknowledged = int.from_bytes(payload[2:])
+        self.assertEqual(acknowledged, 5)
+        
+        t.join()
+        
+        self.assertEqual(client.blockNum, 5)
+        
+        srv.close()
+
+    def test_read_request(self):
+        '''
+        Tests client sending RRQ and server replying with first packet.
+        '''
+        pass
 
 if __name__ == "__main__":
     unittest.main()

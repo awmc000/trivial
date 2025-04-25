@@ -168,15 +168,18 @@ class Client():
             # Receive packet
             packet, (serverAddress, serverPort) = self.sock.recvfrom(1024)
             self.blockNum += 1
-            
+                        
             # TODO: Send error if packet has wrong source port!
             # TODO: Any other error handling
             
             # Acknowledge packet
             ack = createAckPacket(self.blockNum)
             self.sock.sendto(ack, dest)
-    
-    
+            
+            # We are done if the payload size is less than 512 bytes
+            if len(packet) < 512:
+                return
+
     def getFile(self, address, filename):
         '''
         Handles entire process of getting a file from a remote host with TFTP.
@@ -186,7 +189,7 @@ class Client():
         # Make a read request
         self.requestRead(address, filename)
         
-        # Receive the file buffer
+        # Receive the file buffer (first packet is ACK)
         fileBuffer = self.receive()
         
         # Save the file

@@ -157,10 +157,15 @@ class Client():
         # Block for ACK 0
         payload, (serverAddress, serverPort) = self.sock.recvfrom(1024)
                 
-        # Now we know the destination port.
+        # Now we know the destination addr & port.
+        self.destinationAddress = serverAddress
         self.destinationPort = serverPort
     
     def receive(self):
+        '''
+        After making a read request (RRQ) this function is called to
+        initiate and complete the transmission. 
+        '''
                 
         buffer = bytes(0)
         self.blockNum = 0
@@ -220,3 +225,47 @@ class Client():
         # Save the file
         with open(filename, '+w') as file:
             file.write(str(fileBuffer, encoding='utf8'))
+    
+    def send(self, buffer):
+        '''
+        After a write request (WRQ) is made this function is called with
+        a byte buffer to send to the destination this client is connected to.
+        '''
+        sent = 0
+        block = 1
+        
+        while sent < len(buffer):
+            # Create a block
+            block = createDataPacket(block, buffer[:512])
+            
+            # Send a block
+            self.sock.sendto(block, (self.destinationAddress, self.destinationPort))
+
+            sent += len(buffer[:512])
+            buffer = buffer[512:]
+            
+            # Quit if done
+            if len(buffer) == 0:
+                return
+            
+            # Await acknowledgment
+            ack, (serverAddress, serverPort) = self.sock.recvfrom(1024)
+            
+            # TODO: Handle potential erroneous ACKs
+    
+    def sendFile(self, address, filename):
+        '''
+        Handles entire process of sending a file to remote host with TFTP.
+        One of two entry points to the client, the other being getFile.
+        '''
+        # Load the file into a byte buffer
+        buf = None
+        
+        with open(filename, 'r+') as file:
+            buf = bytes(file.read(), encoding='utf8')
+        
+        # Make a write request
+        self.requestWrite(address, filename)
+        
+        # Send the buffer
+        self.send(buf)

@@ -157,6 +157,11 @@ class Client():
         # Block for ACK 0
         payload, (serverAddress, serverPort) = self.sock.recvfrom(1024)
                 
+        # TODO: Handle payload nt being an ACK 0 packet
+        
+        # Ready for first real packet
+        self.blockNum += 1
+        
         # Now we know the destination addr & port.
         self.destinationAddress = serverAddress
         self.destinationPort = serverPort
@@ -232,26 +237,23 @@ class Client():
         a byte buffer to send to the destination this client is connected to.
         '''
         sent = 0
-        block = 1
-        
-        while sent < len(buffer):
+        toSend = len(buffer)
+
+        while sent < toSend:
             # Create a block
-            block = createDataPacket(block, buffer[:512])
+            datablock = createDataPacket(self.blockNum, buffer[:512])
             
             # Send a block
-            self.sock.sendto(block, (self.destinationAddress, self.destinationPort))
+            self.sock.sendto(datablock, (self.destinationAddress, self.destinationPort))
 
             sent += len(buffer[:512])
             buffer = buffer[512:]
             
-            # Quit if done
-            if len(buffer) == 0:
-                return
-            
             # Await acknowledgment
             ack, (serverAddress, serverPort) = self.sock.recvfrom(1024)
+            self.blockNum += 1
             
-            # TODO: Handle potential erroneous ACKs
+            # TODO: Handle potential erroneous ACKs or error packets
     
     def sendFile(self, address, filename):
         '''

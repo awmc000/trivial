@@ -133,7 +133,7 @@ class ClientBehaviourTests(unittest.TestCase):
         srv.sendto(tftp.createAckPacket(0), (client_address, client_port))
 
         # Wait for client thread to finish, so we can check state of client
-        t.join()
+        t.join(0.5)
         
         self.assertEqual(client.destinationPort, 12222)
         
@@ -172,7 +172,7 @@ class ClientBehaviourTests(unittest.TestCase):
         acknowledged = int.from_bytes(payload[2:])
         self.assertEqual(acknowledged, 5)
         
-        t.join()
+        t.join(0.5)
         
         self.assertEqual(client.blockNum, 5)
         
@@ -188,7 +188,7 @@ class ClientBehaviourTests(unittest.TestCase):
         srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         srv.bind(('0.0.0.0', 11111))
         
-        # Make a write request, put it in a thread so it can block for our response
+        # Make a read request, put it in a thread so it can block for our response
         t = Thread(target = client.getFile, args=['0.0.0.0', 'doc.txt'])
         t.start()
         payload, (client_address, client_port) = srv.recvfrom(1024)
@@ -207,8 +207,72 @@ class ClientBehaviourTests(unittest.TestCase):
         # Verify what was received by the server
         self.assertEqual(tftp.createAckPacket(1), payload)
         
-        t.join()
+        t.join(0.5)
         srv.close()
 
+    def test_send(self):
+        '''
+        Tests that client can send a multi-block buffer to the server properly
+        '''
+        client = tftp.Client()
+
+        # Set up socket to stand in for server
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(('0.0.0.0', 11111))
+        
+        # From client, make a write request, then join thread
+        t = Thread(target=client.requestWrite, args=['127.0.0.1', 'honeybee.txt'])
+        t.start()
+        
+        # Receive write request
+        payload, (client_address, client_port) = srv.recvfrom(1024)
+
+        # Verify what was received by the server at KNOWN_PORT
+        self.assertEqual(tftp.createConnectionPacket('w', 'honeybee.txt'), payload)
+
+        # Put server on a new port in keeping with defined server behaviour
+        srv.close()
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(('0.0.0.0', 12222))
+        
+        # Send ACK 0 from new TID (port)
+        srv.sendto(tftp.createAckPacket(0), (client_address, client_port))
+        
+        t.join(0.5)
+        
+        # The client should have set destinationAddress and destinationPort now
+        self.assertEqual(client.destinationAddress, '127.0.0.1') 
+        self.assertEqual(client.destinationPort, 12222) 
+        
+        # Create new thread that sends blocks
+        big_block = bytes('honeybee', 'utf8') * 64
+        lil_block = big_block[:504]
+        buffer = big_block + big_block + big_block + lil_block
+        
+        t = Thread(target=client.send, args=[buffer])
+        t.start()
+        
+        # Receive and acknowledge blocks 1, 2, 3
+        for blockNum in range(1, 3+1):
+            payload, (client_address, client_port) = srv.recvfrom(1024)
+            
+            # Verify block number of data block
+            self.assertEqual(int.from_bytes(payload[2:4]), blockNum)
+            
+            # Verify contents
+            self.assertEqual(payload[4:], big_block)
+            
+            # Acknowledge data block
+            srv.sendto(tftp.createAckPacket(blockNum), (client_address, client_port))
+        
+        # Receive and acknowledge final block 4
+        payload, (client_address, client_port) = srv.recvfrom(1024)
+        self.assertEqual(int.from_bytes(payload[2:4]), 4)
+        self.assertEqual(payload[4:], lil_block)
+
+        t.join(0.5)
+        
+        srv.close()
+        
 if __name__ == "__main__":
     unittest.main()

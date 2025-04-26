@@ -20,6 +20,7 @@
 # Modules from std library
 import unittest
 import socket
+import os
 from threading import Thread
 
 # Modules from this project
@@ -273,6 +274,59 @@ class ClientBehaviourTests(unittest.TestCase):
         t.join(0.5)
         
         srv.close()
+    
+    def test_send_file(self):
+        '''
+        Send a *large* multi block file from the client using the proper entry point.
+        '''
+        # Delete file if it exists
+        try:
+            os.remove(tftp.DOWNLOAD_DIR + 'garden-verses.txt')
+        except FileNotFoundError:
+            pass
+        
+        client = tftp.Client()
+        
+        # Set up socket to stand in for server
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(('0.0.0.0', 11111))
+        
+        # Create a thread that sends `garden-verses.txt`
+        t = Thread(target=client.sendFile, args=['127.0.0.1', 'garden-verses.txt'])
+        t.start()
+
+        # First it will send WRQ, receive that and send back ACK 0
+        payload, (client_address, client_port) = srv.recvfrom(1024)
+        blockNum = 0
+        srv.sendto(tftp.createAckPacket(blockNum), (client_address, client_port))
+
+        self.assertEqual(tftp.createConnectionPacket('w', 'garden-verses.txt'), payload)
+        
+        # Then it will send many 512 byte blocks; receive them and acknowledge them 
+        fileBuffer = bytes(0)
+        blockNum += 1
+        payload, (client_address, client_port) = srv.recvfrom(1024)
+        self.assertEqual(int.from_bytes(payload[2:4]), 1)
+        srv.sendto(tftp.createAckPacket(blockNum), (client_address, client_port))
+
+        while True:
+            blockNum += 1
+            payload, (client_address, client_port) = srv.recvfrom(1024)
+            self.assertEqual(int.from_bytes(payload[2:4]), blockNum)
+            fileBuffer += payload[4:]
+            srv.sendto(tftp.createAckPacket(blockNum), (client_address, client_port))
+            if len(payload) < 516:
+                break
+
+        self.assertEqual(int.from_bytes(payload[2:4]), blockNum)
+        self.assertTrue(len(payload[4:]) < 512)
+        srv.sendto(tftp.createAckPacket(blockNum), (client_address, client_port))
+        
+        t.join(0.5)
+        srv.close()
+        with open(tftp.DOWNLOAD_DIR + 'garden-verses.txt', 'w+') as file:
+            file.write(str(fileBuffer, encoding='utf8'))
+    
         
 if __name__ == "__main__":
     unittest.main()

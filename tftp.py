@@ -123,6 +123,8 @@ def createErrorPacket(code: bytes, errorMessage: str = ''):
 # then we don't need admin permissions.
 # KNOWN_PORT = 69
 KNOWN_PORT = 11111
+DOWNLOAD_DIR = 'downloaded/'
+UPLOAD_DIR = 'share/'
 
 class Client():
     '''
@@ -228,7 +230,7 @@ class Client():
         fileBuffer = self.receive()
         
         # Save the file
-        with open(filename, '+w') as file:
+        with open(DOWNLOAD_DIR + filename, '+w') as file:
             file.write(str(fileBuffer, encoding='utf8'))
     
     def send(self, buffer):
@@ -263,7 +265,7 @@ class Client():
         # Load the file into a byte buffer
         buf = None
         
-        with open(filename, 'r+') as file:
+        with open(UPLOAD_DIR + filename, 'r+') as file:
             buf = bytes(file.read(), encoding='utf8')
         
         # Make a write request

@@ -18,7 +18,6 @@
     main.py: entry point for application
 '''
 import socket
-from threading import Thread
 
 MODES = [
     'netascii',
@@ -270,10 +269,8 @@ class Client():
         with open(UPLOAD_DIR + filename, 'r+') as file:
             buf = bytes(file.read(), encoding='utf8')
         
-        # Make a write request in a separate thread so we can timeout
-        p = Thread(target=self.requestWrite, args=(address, filename))
-        p.start()
-        p.join(OPERATION_TIMEOUT)
+        # Make a write request
+        self.requestWrite(address, filename)
         
         # Send the buffer
         self.send(buf)

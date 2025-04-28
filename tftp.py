@@ -18,6 +18,7 @@
     main.py: entry point for application
 '''
 import socket
+from threading import Thread
 
 MODES = [
     'netascii',
@@ -125,6 +126,7 @@ def createErrorPacket(code: bytes, errorMessage: str = ''):
 KNOWN_PORT = 11111
 DOWNLOAD_DIR = 'downloaded/'
 UPLOAD_DIR = 'share/'
+OPERATION_TIMEOUT = 1.0
 
 class Client():
     '''
@@ -151,10 +153,10 @@ class Client():
         self.requestConnection('r', address, filename)
     
     def requestWrite(self, address, filename):
-        self.requestConnection('w', address, filename)
-        
         # We will be expecting ACK for block 0
         self.blockNum = 0
+
+        self.requestConnection('w', address, filename)
         
         # Block for ACK 0
         payload, (serverAddress, serverPort) = self.sock.recvfrom(1024)
@@ -162,7 +164,7 @@ class Client():
         # TODO: Handle payload nt being an ACK 0 packet
         
         # Ready for first real packet
-        self.blockNum += 1
+        self.blockNum = 1
         
         # Now we know the destination addr & port.
         self.destinationAddress = serverAddress
@@ -245,7 +247,7 @@ class Client():
             # Create a block
             datablock = createDataPacket(self.blockNum, buffer[:512])
             
-            # Send a block
+            # TODO: Send blocks and wait for timeout UNTIL acknowledgement is received
             self.sock.sendto(datablock, (self.destinationAddress, self.destinationPort))
 
             sent += len(buffer[:512])
@@ -268,8 +270,10 @@ class Client():
         with open(UPLOAD_DIR + filename, 'r+') as file:
             buf = bytes(file.read(), encoding='utf8')
         
-        # Make a write request
-        self.requestWrite(address, filename)
+        # Make a write request in a separate thread so we can timeout
+        p = Thread(target=self.requestWrite, args=(address, filename))
+        p.start()
+        p.join(OPERATION_TIMEOUT)
         
         # Send the buffer
         self.send(buf)

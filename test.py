@@ -342,7 +342,14 @@ class ClientBehaviourTests(unittest.TestCase):
         srv.close()
         with open(tftp.DOWNLOAD_DIR + 'garden-verses.txt', 'w+') as file:
             file.write(str(fileBuffer, encoding='utf8'))
-    
+        
+        self.assertTrue(os.path.isfile(tftp.DOWNLOAD_DIR + 'garden-verses.txt'))
+        
+        # Delete file now that test is done
+        try:
+            os.remove(tftp.DOWNLOAD_DIR + 'garden-verses.txt')
+        except FileNotFoundError:
+            pass 
         
 if __name__ == "__main__":
     unittest.main()

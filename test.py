@@ -120,7 +120,7 @@ class ClientBehaviourTests(unittest.TestCase):
         srv.bind(('0.0.0.0', 11111))
         t = Thread(target=self.assertRaises, args=[IOError, lambda : client.requestWrite('127.0.0.1', 'doc.txt')])
         t.start()
-        t.join(2.0)
+        t.join(0.75)
         srv.close()
     
     def test_write_request(self):

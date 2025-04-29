@@ -17,6 +17,7 @@
 
     main.py: entry point for application
 '''
+import select
 import socket
 
 MODES = [
@@ -125,7 +126,7 @@ def createErrorPacket(code: bytes, errorMessage: str = ''):
 KNOWN_PORT = 11111
 DOWNLOAD_DIR = 'downloaded/'
 UPLOAD_DIR = 'share/'
-OPERATION_TIMEOUT = 25
+OPERATION_TIMEOUT = 0.5
 OPERATION_ATTEMPTS = 5
 
 class Client():
@@ -161,31 +162,70 @@ class Client():
     def requestRead(self, address, filename):
         self.requestConnection('r', address, filename)
 
+    def receiveAck(self):
+        '''
+        Receives acknowledgement or raises exception within set timeout.
+        Assumes block num set at point of call, increments it if 
+        acknowledgment successfully received. Returns 
+        (new block num, (server addr, server port)) for success, raises 
+        exceptions for various types of failures.
+        '''
+        
+        # Assume blocknum is set at point of call.
+        if self.blockNum is None:
+            raise IOError('Block number was not set before receiveAck called')
+        
+        # Wait for an ack block for current blocknum.
+        # Use select with specified timeout.
+        # Raise IOError for timeout
+        r, w, x = select.select([self.sock], [], [], OPERATION_TIMEOUT)
+        
+        # print(f'r: {r} w: {w} x: {x}')
+        
+        # Nothing ready to read within time => timeout
+        if r == []:
+            raise IOError('No ack received in timeout')
+        
+        # Check FD
+        if r[0].fileno != self.sock.fileno:
+            raise ValueError(f' readable: {r} first: {r[0]} Different sock ready to read')
+        
+        # Get actual packet and check contents
+        payload, (serverAddress, serverPort) = self.sock.recvfrom(1024)
+
+        # TODO: wrong TID => send error packet
+
+        # Handle payload nt being an ACK 0 packet
+        if payload == createAckPacket(self.blockNum):
+            self.blockNum += 1
+            return (self.blockNum, (serverAddress, serverPort))
+        else:
+            raise IOError(f'Wrong ack received')
+
     def requestWrite(self, address, filename):
         # We will be expecting ACK for block 0
         self.blockNum = 0
 
         requestAttempts = 0
-        while not self.requestAccepted and requestAttempts < OPERATION_ATTEMPTS:
+        while requestAttempts < OPERATION_ATTEMPTS:
             self.requestConnection('w', address, filename)
-
-            # Block for ACK 0 - timeout happens here in `recvfrom`
-            payload, (serverAddress, serverPort) = self.sock.recvfrom(1024)
-
-            # TODO: Handle payload nt being an ACK 0 packet
-            if payload == createAckPacket(0):
-                self.requestAccepted = True
+            
+            try:
+                blk, (self.destinationAddress, self.destinationPort) = self.receiveAck()
+                
+                # If proper ack received:
+                if blk:
+                    break
+            # TODO: Handle exceptions properly!
+            except IOError:
+                pass
+            except ValueError:
+                pass
             requestAttempts += 1
 
-        if not self.requestAccepted:
-            raise IOError('Write request not accepted within set timeout and number of attempts')
-
         # Ready for first real packet
-        self.blockNum = 1
-
-        # Now we know the destination addr & port.
-        self.destinationAddress = serverAddress
-        self.destinationPort = serverPort
+        if self.blockNum != 1:
+            raise IOError('Block num was not 1 after receiving ack 0 => WRQ not accepted')
 
     def receive(self):
         '''

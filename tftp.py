@@ -317,14 +317,12 @@ class Client():
 
                 # TODO: Handle potential erroneous ACKs or error packets
                 # Await acknowledgment
-                ack, (serverAddress, serverPort) = self.sock.recvfrom(1024)
-                
-                # if ack == createAckPacket(self.blockNum):
-                #     sent = True
-                #     print(f'\n. Correct ACK received! should be {self.blockNum}, was {ack}')
-                # else:
-                #     raise IOError(f'\nx incorrect ACK received! should be {self.blockNum}, was {ack}')
-                self.blockNum += 1             
+                try:
+                    blk, (serverAddress, serverPort) = self.receiveAck()
+                    if blk == self.blockNum:
+                        break
+                except IOError:
+                    blockAttempts += 1
                 
 
 

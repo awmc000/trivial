@@ -289,7 +289,7 @@ class ClientBehaviourTests(unittest.TestCase):
         t.join(0.5)
         
         srv.close()
-    
+
     def test_send_file(self):
         '''
         Send a *large* multi block file from the client using the proper entry point.

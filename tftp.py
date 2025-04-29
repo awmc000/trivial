@@ -320,6 +320,7 @@ class Client():
                 try:
                     blk, (serverAddress, serverPort) = self.receiveAck()
                     if blk == self.blockNum:
+                        sent = True
                         break
                 except IOError:
                     blockAttempts += 1

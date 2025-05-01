@@ -18,6 +18,7 @@
     test.py: unit tests for all parts of the program
 '''
 # Modules from std library
+from queue import Queue
 import unittest
 import socket
 import os
@@ -214,7 +215,7 @@ class ClientBehaviourTests(unittest.TestCase):
         # Send one segment from a different socket
         srv.close()
         srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        srv.bind(('0.0.0.0', 12222))
+        srv.bind(('0.0.0.0', 12223))
         
         srv.sendto(tftp.createDataPacket(1, bytes('Hello, World!', 'utf8')), (client_address, client_port))
         payload, (client_address, client_port) = srv.recvfrom(1024)
@@ -248,7 +249,7 @@ class ClientBehaviourTests(unittest.TestCase):
         # Put server on a new port in keeping with defined server behaviour
         srv.close()
         srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        srv.bind(('0.0.0.0', 12222))
+        srv.bind(('0.0.0.0', 12224))
         
         # Send ACK 0 from new TID (port)
         srv.sendto(tftp.createAckPacket(0), (client_address, client_port))
@@ -257,7 +258,7 @@ class ClientBehaviourTests(unittest.TestCase):
         
         # The client should have set destinationAddress and destinationPort now
         self.assertEqual(client.destinationAddress, '127.0.0.1') 
-        self.assertEqual(client.destinationPort, 12222) 
+        self.assertEqual(client.destinationPort, 12224) 
         
         # Create new thread that sends blocks
         big_block = bytes('honeybee', 'utf8') * 64
@@ -350,6 +351,69 @@ class ClientBehaviourTests(unittest.TestCase):
             os.remove(tftp.DOWNLOAD_DIR + 'garden-verses.txt')
         except FileNotFoundError:
             pass 
+
+    def test_sent_handle_diskfull_last_packet(self):
+        '''
+        The client should return false if a disk full error is received during transfer of a file
+        instead of the acknowledgment of the last packet.
+        '''
+        client = tftp.Client()
+
+        # Set up socket to stand in for server
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(('0.0.0.0', 11111))
         
+        # Create new thread that sends blocks
+        big_block = bytes('honeybee', 'utf8') * 64
+        lil_block = big_block[:504]
+        buffer = big_block + big_block + big_block + lil_block
+        
+        with open(tftp.UPLOAD_DIR + 'fulltest.txt', 'w+') as tempfile:
+            tempfile.write(str(buffer, encoding='utf8'))
+        
+        sendingResult = Queue()
+        t = Thread(target=lambda sendingResult: sendingResult.put(client.sendFile('127.0.0.1', 'fulltest.txt')), args=[sendingResult])
+        t.start()
+        
+        # Receive write request
+        payload, (client_address, client_port) = srv.recvfrom(1024)
+
+        # Verify what was received by the server at KNOWN_PORT
+        self.assertEqual(tftp.createConnectionPacket('w', 'fulltest.txt'), payload)
+
+        # Put server on a new port in keeping with defined server behaviour
+        srv.close()
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(('0.0.0.0', 12225))
+        
+        # Send ACK 0 from new TID (port)
+        srv.sendto(tftp.createAckPacket(0), (client_address, client_port))
+                        
+        # Receive and acknowledge blocks 1, 2, 3
+        for blockNum in range(1, 3+1):
+            payload, (client_address, client_port) = srv.recvfrom(1024)
+            
+            # Verify block number of data block
+            self.assertEqual(int.from_bytes(payload[2:4]), blockNum)
+            
+            # Verify contents
+            self.assertEqual(payload[4:], big_block)
+            
+            # Acknowledge data block
+            srv.sendto(tftp.createAckPacket(blockNum), (client_address, client_port))
+        
+        # Receive final block 4 and send a DISK_FULL error.
+        payload, (client_address, client_port) = srv.recvfrom(1024)
+        self.assertEqual(int.from_bytes(payload[2:4]), 4)
+        self.assertEqual(payload[4:], lil_block)
+        srv.sendto(tftp.createErrorPacket(tftp.ErrorCodes.DISK_FULL), (client_address, client_port))
+
+        t.join(0.5)
+        
+        self.assertEqual(sendingResult.qsize(), 1)
+        self.assertFalse(sendingResult.get())
+        
+        srv.close()
+
 if __name__ == "__main__":
     unittest.main()

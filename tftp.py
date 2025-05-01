@@ -17,6 +17,7 @@
 
     main.py: entry point for application
 '''
+import os
 import select
 import socket
 
@@ -140,11 +141,6 @@ class Client():
 
         # This is the source port or source TID we will put in datagrams
         self.sourcePort = self.sock.getsockname()[1]
-
-        # set timeout for all socket operations
-        # TODO: figure out how to implement timeouts properly!
-        # This closes the socket globally after the timeout
-        # self.sock.settimeout(OPERATION_TIMEOUT)
 
         # Connection state
         self.requestAccepted = False
@@ -306,9 +302,8 @@ class Client():
 
             # Attempt to send this block OPERATION_ATTEMPTS times
             blockAttempts = 0
-            sent = False
             
-            while blockAttempts < OPERATION_ATTEMPTS and not sent:
+            while blockAttempts < OPERATION_ATTEMPTS:
                 # TODO: Send blocks and wait for timeout UNTIL acknowledgement is received
                 self.sock.sendto(datablock, (self.destinationAddress, self.destinationPort))
 
@@ -320,20 +315,23 @@ class Client():
                 try:
                     blk, (serverAddress, serverPort) = self.receiveAck()
                     if blk == self.blockNum:
-                        sent = True
                         break
+                    else:
+                        raise IOError(f'Wrong ack received! Expected {self.blockNum} and got {blk}')
                 except IOError:
                     blockAttempts += 1
                 
-
-
     def sendFile(self, address, filename):
         '''
         Handles entire process of sending a file to remote host with TFTP.
         One of two entry points to the client, the other being getFile.
+        Returns success of file transfer.
         '''
         # Load the file into a byte buffer
         buf = None
+
+        if not os.path.isfile(UPLOAD_DIR + filename):
+            return False
 
         with open(UPLOAD_DIR + filename, 'r+') as file:
             buf = bytes(file.read(), encoding='utf8')
@@ -342,4 +340,8 @@ class Client():
         self.requestWrite(address, filename)
 
         # Send the buffer
-        self.send(buf)
+        try:
+            self.send(buf)
+            return True
+        except IOError:
+            return False

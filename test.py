@@ -20,6 +20,7 @@ test.py: unit tests for all parts of the program
 
 # Modules from std library
 from queue import Queue
+import select
 import unittest
 import socket
 import os
@@ -512,6 +513,112 @@ class ClientBehaviourTests(unittest.TestCase):
             seen.add(c.source_port)
 
         self.assertEqual(len(seen), N)
+
+    def test_ack_wrong_source_port(self):
+        """
+        Sets up a file transfer from client to server (WRQ). Tests that the
+        client will send error packets with type 5 (Unknown transfer ID) when
+        it receives a packet from the wrong port. This should be checked
+        AHEAD of whether it is the correct type etc.
+
+        Suppose a client is making a write, and is waiting for ACK 26 from port 2222.
+        If it receives an ACK 26 from any other port, it will ignore as many as
+        arrive. If a bazillion packets (we will use slightly less in this test) arrive that
+        are identical except the source TID (port), and a single one arrives that
+        has the correct block number and port, the transfer should continue uninterrupted.
+
+        This behaviour is described in the RFC as follows:
+
+        > "If a source TID does not match, the packet should be
+        > discarded as erroneously sent from somewhere else. An error packet
+        > should be sent to the source of the incorrect packet, while not
+        > disturbing the transfer."
+        """
+
+        client = tftp.Client()
+
+        # Set up socket to stand in for server listening at KNOWN_PORT
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(("0.0.0.0", 11111))
+
+        # From client, make a write request, then join thread
+        t = Thread(target=client.request_write, args=["127.0.0.1", "garden-verses.txt"])
+        t.start()
+
+        # Receive write request
+        payload, (client_address, client_port) = srv.recvfrom(1024)
+
+        # Verify what was received by the server at KNOWN_PORT
+        self.assertEqual(
+            tftp.create_connection_packet("w", "garden-verses.txt"), payload
+        )
+
+        # Put server on a new port in keeping with defined server behaviour
+        srv.close()
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(("0.0.0.0", 12224))
+
+        # Set up a socket playing the role of an interrupting server
+        # It will attempt to distract the client and test its ability to resist >:)
+        distracting_srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        distracting_srv.setblocking(False)
+        distracting_srv.bind(("0.0.0.0", 11223))
+
+        # Send ACK 0 from new TID (port)
+        srv.sendto(tftp.create_ack_packet(0), (client_address, client_port))
+        t.join(0.5)
+
+        # The client should have set destinationAddress and destinationPort now
+        self.assertEqual(client.destination_address, "127.0.0.1")
+        self.assertEqual(client.destination_port, 12224)
+
+        # Create new thread that sends blocks
+        big_block = bytes("honeybee", "utf8") * 64
+        lil_block = big_block[:504]
+        buffer = big_block + big_block + big_block + lil_block
+        t = Thread(target=client.send, args=[buffer])
+        t.start()
+
+        # Receive and acknowledge blocks 1, 2, 3
+        for block_num in range(1, 3 + 1):
+            payload, (client_address, client_port) = srv.recvfrom(1024)
+
+            # Verify block number of data block
+            self.assertEqual(int.from_bytes(payload[2:4]), block_num)
+
+            # Verify contents
+            self.assertEqual(payload[4:], big_block)
+
+            # Send a bad acknowledgement which the client must ignore
+            distracting_srv.sendto(
+                tftp.create_ack_packet(block_num), (client_address, client_port)
+            )
+            distracting_srv_ready = select.select([distracting_srv], [], [], 1.0)
+            if distracting_srv_ready[0]:
+                error_payload = distracting_srv.recvfrom(1024)[0]
+
+                # Check that the client sent back an ERROR packet with type 5, unknown TID
+                self.assertEqual(
+                    tftp.create_error_packet(tftp.ErrorCodes.UNKNOWN_TID), error_payload
+                )
+
+                # Acknowledge data block
+                srv.sendto(
+                    tftp.create_ack_packet(block_num), (client_address, client_port)
+                )
+            else:
+                srv.close()
+                self.fail()
+
+        # Receive and acknowledge final block 4
+        payload, (client_address, client_port) = srv.recvfrom(1024)
+        self.assertEqual(int.from_bytes(payload[2:4]), 4)
+        self.assertEqual(payload[4:], lil_block)
+        srv.sendto(tftp.create_ack_packet(4), (client_address, client_port))
+
+        t.join(0.5)
+        srv.close()
+        distracting_srv.close()
 
 if __name__ == "__main__":
     unittest.main()

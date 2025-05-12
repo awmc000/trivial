@@ -221,36 +221,39 @@ class Client:
         (new block num, (server addr, server port)) for success, raises
         exceptions for various types of failures.
         """
+        while True:
+            # Assume blocknum is set at point of call.
+            if self.block_num is None:
+                raise IOError("Block number was not set before receiveAck called")
 
-        # Assume blocknum is set at point of call.
-        if self.block_num is None:
-            raise IOError("Block number was not set before receiveAck called")
+            # Wait for an ack block for current blocknum.
+            # Use select with specified timeout.
+            # Raise IOError for timeout
+            r = select.select([self.sock], [], [], OPERATION_TIMEOUT)[0]
 
-        # Wait for an ack block for current blocknum.
-        # Use select with specified timeout.
-        # Raise IOError for timeout
-        r = select.select([self.sock], [], [], OPERATION_TIMEOUT)[0]
+            # Nothing ready to read within time => timeout
+            if r == []:
+                raise IOError("No ack received in timeout")
 
-        # Nothing ready to read within time => timeout
-        if r == []:
-            raise IOError("No ack received in timeout")
+            # Get actual packet and check contents
+            payload, (server_address, server_port) = self.sock.recvfrom(1024)
 
-        # Check FD
-        if r[0].fileno() != self.sock.fileno():
-            raise ValueError(
-                f" readable: {r} first: {r[0]} Different sock ready to read"
-            )
+            # print(f'Have dest port {self.destination_port}, Received packet from {server_port}, {payload[:50]}')
 
-        # Get actual packet and check contents
-        payload, (server_address, server_port) = self.sock.recvfrom(1024)
+            if self.block_num == 0:
+                self.destination_port = server_port
 
-        # TODO: wrong TID => send error packet
+            # TODO: wrong TID => send error packet
+            if server_port != self.destination_port:
+                self.sock.sendto(create_error_packet(ErrorCodes.UNKNOWN_TID), (server_address, server_port))
+                continue
 
-        # Handle payload nt being an ACK 0 packet
-        if payload == create_ack_packet(self.block_num):
-            self.block_num += 1
-            return (self.block_num, (server_address, server_port))
-        raise IOError(f"Received something other than expected ACK {self.block_num}")
+            # Handle payload nt being an ACK packet of expected block num
+            if payload == create_ack_packet(self.block_num):
+                self.block_num += 1
+                return (self.block_num, (server_address, server_port))
+
+            raise IOError(f"Received something other than expected ACK {self.block_num}")
 
     def receive(self):
         """

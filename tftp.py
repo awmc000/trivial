@@ -202,10 +202,11 @@ class Client:
             # try:
             blk, (self.destination_address, self.destination_port) = self.receive_ack()
 
-            # If proper ack received:
-            # TODO: Check that blk is ACK 0 from expected IP address!
-            if blk:
+            # If the proper ack received, blk is now 1
+            if blk == 1:
                 break
+            else:
+                raise ValueError('WRQ failed')
 
             request_attempts += 1
 
@@ -237,6 +238,8 @@ class Client:
 
             # Get actual packet and check contents
             payload, (server_address, server_port) = self.sock.recvfrom(1024)
+
+            # TODO: Abort transfer if error packet received
 
             # print(f'Have dest port {self.destination_port}, Received packet from {server_port}, {payload[:50]}')
 

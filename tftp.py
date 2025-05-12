@@ -196,7 +196,7 @@ class Client():
             self.blockNum += 1
             return (self.blockNum, (serverAddress, serverPort))
         else:
-            raise IOError(f'Wrong ack received')
+            raise IOError(f'Received something other than expected ACK {self.blockNum}')
 
     def requestWrite(self, address, filename):
         # We will be expecting ACK for block 0
@@ -210,6 +210,7 @@ class Client():
                 blk, (self.destinationAddress, self.destinationPort) = self.receiveAck()
                 
                 # If proper ack received:
+                # TODO: Check that blk is ACK 0 from expected IP address!
                 if blk:
                     break
             # TODO: Handle exceptions properly!
@@ -312,14 +313,11 @@ class Client():
 
                 # TODO: Handle potential erroneous ACKs or error packets
                 # Await acknowledgment
-                try:
-                    blk, (serverAddress, serverPort) = self.receiveAck()
-                    if blk == self.blockNum:
-                        break
-                    else:
-                        raise IOError(f'Wrong ack received! Expected {self.blockNum} and got {blk}')
-                except IOError:
-                    blockAttempts += 1
+                blk, (serverAddress, serverPort) = self.receiveAck()
+                if blk == self.blockNum:
+                    break
+                else:
+                    raise IOError(f'Wrong ack received! Expected {self.blockNum} and got {blk}')
                 
     def sendFile(self, address, filename):
         '''

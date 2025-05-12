@@ -372,7 +372,10 @@ class ClientBehaviourTests(unittest.TestCase):
             tempfile.write(str(buffer, encoding='utf8'))
         
         sendingResult = Queue()
-        t = Thread(target=lambda sendingResult: sendingResult.put(client.sendFile('127.0.0.1', 'fulltest.txt')), args=[sendingResult])
+        def clientSend():
+            sendingResult.put(client.sendFile('127.0.0.1', 'fulltest.txt'))
+        
+        t = Thread(target=clientSend)
         t.start()
         
         # Receive write request
@@ -414,6 +417,8 @@ class ClientBehaviourTests(unittest.TestCase):
         self.assertFalse(sendingResult.get())
         
         srv.close()
+        os.remove(tftp.UPLOAD_DIR + 'fulltest.txt')
+
 
 if __name__ == "__main__":
     unittest.main()

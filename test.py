@@ -620,5 +620,16 @@ class ClientBehaviourTests(unittest.TestCase):
         srv.close()
         distracting_srv.close()
 
+class ServerBehaviourTests(unittest.TestCase):
+    """
+    Tests of server behaviour, aiming for compliance with RFC 1350 and
+    project specific design choices.
+    """
+
+    def test_create_bind(self):
+        server = tftp.Server()
+        self.assertIsNotNone(server.listener_sock)
+        self.assertEqual(tftp.KNOWN_PORT, server.listener_sock.getsockname()[1])
+
 if __name__ == "__main__":
     unittest.main()

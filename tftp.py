@@ -164,9 +164,6 @@ class Client:
 
         self.destination_address = None
         self.destination_port = None
-
-        # Connection state
-        self.request_accepted = False
         self.block_num = None
 
     def __del__(self):
@@ -199,7 +196,7 @@ class Client:
         while request_attempts < OPERATION_ATTEMPTS:
             self.request_connection("w", address, filename)
 
-            # try:
+            # Raises IOErrors for errors or timeout
             blk, (self.destination_address, self.destination_port) = self.receive_ack()
 
             # If the proper ack received, blk is now 1
@@ -246,7 +243,7 @@ class Client:
             if self.block_num == 0:
                 self.destination_port = server_port
 
-            # TODO: wrong TID => send error packet
+            # wrong TID => send error packet
             if server_port != self.destination_port:
                 self.sock.sendto(create_error_packet(ErrorCodes.UNKNOWN_TID), (server_address, server_port))
                 continue
@@ -338,7 +335,6 @@ class Client:
             block_attempts = 0
 
             while block_attempts < OPERATION_ATTEMPTS:
-                # TODO: Send blocks and wait for timeout UNTIL acknowledgement is received
                 self.sock.sendto(
                     datablock, (self.destination_address, self.destination_port)
                 )
@@ -346,8 +342,8 @@ class Client:
                 sent += len(buffer[:512])
                 buffer = buffer[512:]
 
-                # TODO: Handle potential erroneous ACKs or error packets
                 # Await acknowledgment
+
                 blk = self.receive_ack()[0]
                 if blk == self.block_num:
                     break
@@ -379,3 +375,31 @@ class Client:
             return True
         except IOError:
             return False
+
+class Server():
+    """
+    TFTP server. Listens for connections and handles them in a new thread.
+    """
+
+    def __init__(self):
+        self.listener_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.listener_sock.bind(("localhost", KNOWN_PORT))
+
+        self.destination_address = None
+        self.destination_port = None
+        self.block_num = None
+
+    def __del__(self):
+        self.listener_sock.close()
+
+    def listen(self):
+        '''
+        Waits for incoming transfer requests, handling them in a separate thread.
+        '''
+        pass
+
+    def receive_file(self):
+        pass
+
+    def send_file(self):
+        pass

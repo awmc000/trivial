@@ -30,9 +30,9 @@ import tftp
 
 
 class RequestPacketCreationTests(unittest.TestCase):
-    '''
+    """
     Tests for the utility functions for creating valid TFTP WRQ/RRQ packets.
-    '''
+    """
 
     def test_bad_request_type(self):
         # There is no "x" mode, it's either 'r' or 'w'
@@ -68,9 +68,9 @@ class RequestPacketCreationTests(unittest.TestCase):
 
 
 class DataPacketCreationTests(unittest.TestCase):
-    '''
+    """
     Tests for the utility functions for creating valid TFTP data packets.
-    '''
+    """
 
     def test_bad_block_number(self):
         for bad_num in [-10, -1, 1000, 2048]:
@@ -97,12 +97,13 @@ class DataPacketCreationTests(unittest.TestCase):
 
 
 class AckPacketCreationTests(unittest.TestCase):
-    '''
+    """
     Tests for the utility functions for creating valid TFTP acknowledgment (ACK) packets.
-    '''
+    """
 
     def test_bad_block_number(self):
         for bad_num in [-10, -1, 1000, 2048]:
+
             def create_bad_ack():
                 tftp.create_ack_packet(bad_num)
 
@@ -116,9 +117,9 @@ class AckPacketCreationTests(unittest.TestCase):
 
 
 class ErrorPacketCreationTests(unittest.TestCase):
-    '''
+    """
     Tests for the utility functions for creating valid TFTP error packets.
-    '''
+    """
 
     def test_bad_code(self):
         def make_bad_error():
@@ -134,10 +135,10 @@ class ErrorPacketCreationTests(unittest.TestCase):
 
 
 class ClientBehaviourTests(unittest.TestCase):
-    '''
-    Tests of client behaviour, aiming for compliance with RFC 1350 and 
+    """
+    Tests of client behaviour, aiming for compliance with RFC 1350 and
     project specific design choices.
-    '''
+    """
 
     def test_create_bind(self):
         client = tftp.Client()
@@ -367,7 +368,9 @@ class ClientBehaviourTests(unittest.TestCase):
         t.join(0.5)
         srv.close()
 
-        with open(tftp.DOWNLOAD_DIR + "garden-verses.txt", "w+", encoding='utf8') as file:
+        with open(
+            tftp.DOWNLOAD_DIR + "garden-verses.txt", "w+", encoding="utf8"
+        ) as file:
             file.write(str(file_buffer, encoding="utf8"))
         self.assertTrue(os.path.isfile(tftp.DOWNLOAD_DIR + "garden-verses.txt"))
 
@@ -411,6 +414,7 @@ class ClientBehaviourTests(unittest.TestCase):
         srv.close()
         srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         srv.bind(("0.0.0.0", 12225))
+
         # Send ACK 0 from new TID (port)
         srv.sendto(tftp.create_ack_packet(0), (client_address, client_port))
 
@@ -442,6 +446,72 @@ class ClientBehaviourTests(unittest.TestCase):
         srv.close()
         os.remove(tftp.UPLOAD_DIR + "fulltest.txt")
 
+    def test_send_no_ack(self):
+        """
+        The client should return false if, when attempting to send a file,
+        the WRQ is accepted but the first data packet is never acknowledged.
+        """
+        client = tftp.Client()
+
+        # Set up socket to stand in for server
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(("0.0.0.0", 11111))
+
+        # Create new thread that sends blocks
+        big_block = bytes("honeybee", "utf8") * 64
+        lil_block = big_block[:504]
+        buffer = big_block + big_block + big_block + lil_block
+        with open(tftp.UPLOAD_DIR + "fulltest.txt", "w+") as tempfile:
+            tempfile.write(str(buffer, encoding="utf8"))
+
+        send_attempt_result = Queue()
+
+        def client_send():
+            send_attempt_result.put(client.send_file("127.0.0.1", "fulltest.txt"))
+
+        t = Thread(target=client_send)
+        t.start()
+        # Receive write request
+        payload, (client_address, client_port) = srv.recvfrom(1024)
+
+        # Verify what was received by the server at KNOWN_PORT
+        self.assertEqual(tftp.create_connection_packet("w", "fulltest.txt"), payload)
+
+        # Put server on a new port in keeping with defined server behaviour
+        srv.close()
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(("0.0.0.0", 12225))
+
+        # Send ACK 0 from new TID (port)
+        srv.sendto(tftp.create_ack_packet(0), (client_address, client_port))
+
+        # Calculate how long it will take to timeout
+        wait = tftp.OPERATION_ATTEMPTS * tftp.OPERATION_TIMEOUT
+
+        t.join(wait)
+        self.assertEqual(send_attempt_result.qsize(), 1)
+        self.assertFalse(send_attempt_result.get())
+        srv.close()
+        os.remove(tftp.UPLOAD_DIR + "fulltest.txt")
+
+    def test_client_ports_random(self):
+        """
+        Tests that client ports are selected randomly, by making N clients
+        and testing that they have N different ports.
+        """
+
+        N = 50
+        clients = []
+        for i in range(N):
+            clients.append(tftp.Client())
+        seen = set()
+
+        for c in clients:
+            self.assertNotIn(c.source_port, seen)
+            self.assertNotIn(c.sock.getsockname()[1], seen)
+            seen.add(c.source_port)
+
+        self.assertEqual(len(seen), N)
 
 if __name__ == "__main__":
     unittest.main()

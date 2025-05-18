@@ -685,6 +685,12 @@ class ServerBehaviourTests(unittest.TestCase):
     project specific design choices.
     """
 
+    def run_server(self, quota: int = 1):
+        server = tftp.Server()
+        server.quota = quota
+        server.listen()
+        # print('server test wrapper: done serving')
+
     def test_create_bind(self):
         server = tftp.Server()
         self.assertIsNotNone(server.listener_sock)
@@ -694,7 +700,37 @@ class ServerBehaviourTests(unittest.TestCase):
         """
         Tests that the server will accept well-formed read requests (RRQs).
         """
-        self.fail()
+        t = Thread(target=self.run_server)
+        t.start()
+
+        # Create faked out client on a random port
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        client.bind(("0.0.0.0", 0))
+        
+        # Create a file
+        filepath = tftp.UPLOAD_DIR + 'quote.md'
+        with open(filepath, 'w+') as file:
+            file.write(
+                '# Quote\n'
+                '"Computer Science is no more about computers than astronomy is about telescopes."'
+                ' - *Dijkstra*'
+            )
+
+        # Send a well formed read request for the file
+        rrq = tftp.create_connection_packet('r', filepath)
+
+        client.settimeout(2.0)
+        client.sendto(rrq, ('localhost', tftp.KNOWN_PORT))
+
+        # Make sure we receive block 1 which serves as ACK
+        payload, (server_address, server_port) = client.recvfrom(1024)
+
+        self.assertEqual(payload[:2], b"\x00\x03")
+        # print(f'packet type check: {payload[:2] == b"\x00\x03"}')
+
+        client.close()
+        os.remove(filepath)
+        t.join()
 
     def test_decline_rrq_file_not_exist(self):
         """

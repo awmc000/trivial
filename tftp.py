@@ -21,6 +21,7 @@ tftp.py: client and server class definitions
 import os
 import select
 import socket
+from threading import Thread
 
 MODES = ["netascii", "octet", "mail"]
 
@@ -148,7 +149,7 @@ DOWNLOAD_DIR = "downloaded/"
 UPLOAD_DIR = "share/"
 OPERATION_TIMEOUT = 0.5
 OPERATION_ATTEMPTS = 5
-
+MAX_MESSAGE_LEN = 516
 
 class Client:
     """
@@ -190,7 +191,7 @@ class Client:
         self.block_num = 0
 
         # Receive initial packet
-        packet, (server_address, server_port) = self.sock.recvfrom(1024)
+        packet, (server_address, server_port) = self.sock.recvfrom(MAX_MESSAGE_LEN)
 
         # TODO: Check for errors in block 0
 
@@ -257,7 +258,7 @@ class Client:
                 raise IOError("No ack received in timeout")
 
             # Get actual packet and check contents
-            payload, (server_address, server_port) = self.sock.recvfrom(1024)
+            payload, (server_address, server_port) = self.sock.recvfrom(MAX_MESSAGE_LEN)
 
             # TODO: Abort transfer if error packet received
 
@@ -293,7 +294,7 @@ class Client:
         # Else loop until rest are received
         while True:
             # Receive packet
-            packet, (server_address, server_port) = self.sock.recvfrom(1024)
+            packet, (server_address, server_port) = self.sock.recvfrom(MAX_MESSAGE_LEN)
 
             if self.destination_port is None:
                 self.destination_port = server_port
@@ -395,6 +396,7 @@ class Server:
     """
 
     def __init__(self):
+        # print('server: creating listener')
         self.listener_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.listener_sock.bind(("localhost", KNOWN_PORT))
 
@@ -402,20 +404,93 @@ class Server:
         self.destination_port = None
         self.block_num = None
 
+        # If a quota is set, the server will handle `quota` transactions then quit.
+        self.quota = None
+        self.thread_pool = []
+        self.last_block = None
+
     def __del__(self):
         self.listener_sock.close()
+        # for t in self.thread_pool:
+            # t.join()
 
     def listen(self):
         """
         Waits for incoming transfer requests, handling them in a separate thread.
         """
+        served = 0
+        
+        while True:
+            # print('server: listening for requests')
 
-    def receive_file(self):
+            if self.quota and served == self.quota:
+                # print('server: quitting listening for quota')
+                return
+            # else:
+                # print(f'served: {served}, quota: {self.quota}, quota is none: {self.quota is None}')
+            
+            payload, (client_address, client_port) = self.listener_sock.recvfrom(MAX_MESSAGE_LEN)
+
+            type = payload[:2]
+            # print(f'server: received request with type {type}')
+
+            if type == b"\x00\x01":
+                served += 1
+                t = Thread(target=self.send_file, args=[client_address, client_port, payload])
+                t.start()
+                self.thread_pool.append(t)
+            elif type == b"\x00\x02":
+                served += 1
+                t = Thread(target=self.receive_file, args=[client_address, client_port, payload])
+                t.start()
+                self.thread_pool.append(t)
+            else:
+                print('server: didn\'t recognize request type')
+
+    def receive_file(self, client_address, client_port, request_packet):
         """
         Responds to a WRQ from a client, completes the transaction and returns.
         """
+        block_num = 0
 
-    def send_file(self):
+    def send_file(self, client_address, client_port, request_packet):
         """
-        Responds to a WRQ from a client, completes the transaction and returns.
+        Responds to a RRQ from a client, completes the transaction and returns.
         """
+        block_num = 0
+
+        # find 0 byte that delimits filename
+        null_pos = request_packet[2:].find(b"\x00") + 2
+        filename = request_packet[2:null_pos]
+        # print(f'sending file {filename}')
+
+        # open file into a buffer
+        buf = None
+        try:
+            with open(filename, 'r') as file:
+                buf = bytes(file.read(), encoding='utf8')
+        except FileNotFoundError:
+            print('TODO: implement filenotfound')
+
+        # create a server socket specific to the transaction served by this thread
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(('localhost', 0))
+
+
+        sent = 0
+        to_send = len(buf)
+        while sent < to_send:
+            # Create data packet
+            data_packet = create_data_packet(block_num, buf[:512])
+
+            # Send to client
+            sock.sendto(data_packet, (client_address, client_port))
+
+            # print(f'server: sent data packet "{data_packet}"')
+
+            # Await acknowledgment
+
+            # Update counter
+            sent += len(data_packet[4:])
+
+        sock.close()

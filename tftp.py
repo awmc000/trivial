@@ -217,8 +217,7 @@ class Client:
         # We will be expecting ACK for block 0
         self.block_num = 0
 
-        request_attempts = 0
-        while request_attempts < OPERATION_ATTEMPTS:
+        while True:
             self.request_connection("w", address, filename)
 
             # Raises IOErrors for errors or timeout
@@ -227,10 +226,7 @@ class Client:
             # If the proper ack received, blk is now 1
             if blk == 1:
                 break
-            else:
-                raise ValueError('WRQ failed')
-
-            request_attempts += 1
+            raise ValueError("WRQ failed")
 
         # Ready for first real packet
         if self.block_num != 1:
@@ -265,14 +261,18 @@ class Client:
 
             # TODO: Abort transfer if error packet received
 
-            # print(f'Have dest port {self.destination_port}, Received packet from {server_port}, {payload[:50]}')
+            # print(f'Have dest port {self.destination_port},'
+            # ' Received packet from {server_port}, {payload[:50]}')
 
             if self.block_num == 0:
                 self.destination_port = server_port
 
             # wrong TID => send error packet
             if server_port != self.destination_port:
-                self.sock.sendto(create_error_packet(ErrorCodes.UNKNOWN_TID), (server_address, server_port))
+                self.sock.sendto(
+                    create_error_packet(ErrorCodes.UNKNOWN_TID),
+                    (server_address, server_port),
+                )
                 continue
 
             # Handle payload nt being an ACK packet of expected block num
@@ -280,11 +280,13 @@ class Client:
                 self.block_num += 1
                 return (self.block_num, (server_address, server_port))
 
-            raise IOError(f"Received something other than expected ACK {self.block_num}")
+            raise IOError(
+                f"Received something other than expected ACK {self.block_num}"
+            )
 
     def receive(self):
         """
-        After making a read request (RRQ) and receiving block 0 this function 
+        After making a read request (RRQ) and receiving block 0 this function
         is called to complete the transmission if there are >=2 blocks.
         """
 
@@ -326,6 +328,8 @@ class Client:
         # Save the file
         with open(DOWNLOAD_DIR + filename, "+w", encoding="utf8") as file:
             file.write(str(self.buffer, encoding="utf8"))
+
+        return True
 
     def send(self, buffer):
         """
@@ -384,7 +388,8 @@ class Client:
         except IOError:
             return False
 
-class Server():
+
+class Server:
     """
     TFTP server. Listens for connections and handles them in a new thread.
     """
@@ -401,13 +406,16 @@ class Server():
         self.listener_sock.close()
 
     def listen(self):
-        '''
+        """
         Waits for incoming transfer requests, handling them in a separate thread.
-        '''
-        pass
+        """
 
     def receive_file(self):
-        pass
+        """
+        Responds to a WRQ from a client, completes the transaction and returns.
+        """
 
     def send_file(self):
-        pass
+        """
+        Responds to a WRQ from a client, completes the transaction and returns.
+        """

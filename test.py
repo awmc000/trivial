@@ -74,11 +74,25 @@ class DataPacketCreationTests(unittest.TestCase):
     """
 
     def test_bad_block_number(self):
+        """
+        Tests that trying to create a data packet with a bad block num
+        raises a ValueError.
+        """
+
         for bad_num in [-10, -1, 1000, 2048]:
-            bad_call = lambda: tftp.create_data_packet(bad_num, bytes(bad_num))
+
+            def bad_call():
+                tftp.create_data_packet(bad_num, bytes(bad_num))
+
             self.assertRaises(ValueError, bad_call)
 
     def test_no_data_ok(self):
+        """
+        Tests that it is OK to create a 0-byte data packet. This is intended behaviour.
+        When a host sends a file that is exactly 512 bytes, the other host takes the
+        length as a signal to expect more blocks, so we need to send a block of less than
+        512 bytes to cut off the transfer, hence the empty block.
+        """
         pkt = tftp.create_data_packet(5, bytes(0))
         exp = b"\x00\x03\x00\x05"
         self.assertEqual(pkt, exp)
@@ -222,31 +236,29 @@ class ClientBehaviourTests(unittest.TestCase):
         srv.close()
 
     def test_accepted_requests_return_true(self):
-        '''
+        """
         Tests that the client methods return True when WRQs or RRQs are
         accepted.
-        '''
+        """
+
         # Create a thread function that acts like a server
         # that approves N requests and then quits.
         def nice_server(request_quota):
             srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             srv.bind(("0.0.0.0", 11111))
-            
+
             approved = 0
             while approved < request_quota:
                 payload, (client_address, client_port) = srv.recvfrom(1024)
 
-                if payload[:2] == b'\x00\x01':
+                if payload[:2] == b"\x00\x01":
                     # It's a read request, send a fake block 1.
                     srv.sendto(
-                        tftp.create_data_packet(
-                            1, 
-                            bytes("Hello, World!", "utf8")
-                        ),
+                        tftp.create_data_packet(1, bytes("Hello, World!", "utf8")),
                         (client_address, client_port),
                     )
                     approved += 1
-                elif payload[:2] == b'\x00\x02':
+                elif payload[:2] == b"\x00\x02":
                     # It's a write request, send a fake ack 0.
                     srv.sendto(
                         tftp.create_ack_packet(0),
@@ -260,9 +272,9 @@ class ClientBehaviourTests(unittest.TestCase):
 
         client = tftp.Client()
 
-        self.assertTrue(client.request_read('127.0.0.1', 'nexist.txt'))
-        self.assertTrue(client.request_write('127.0.0.1', 'nexist.txt'))
-        
+        self.assertTrue(client.request_read("127.0.0.1", "nexist.txt"))
+        self.assertTrue(client.request_write("127.0.0.1", "nexist.txt"))
+
         t.join()
 
     def test_receive(self):
@@ -287,7 +299,6 @@ class ClientBehaviourTests(unittest.TestCase):
         # Create thread where client receives blocks
         t = Thread(target=client.receive)
         t.start()
-
 
         for i in range(1, 4):
             # Send a block, receive ACK, check that it is correct
@@ -548,9 +559,9 @@ class ClientBehaviourTests(unittest.TestCase):
         and testing that they have N different ports.
         """
 
-        N = 50
+        n = 50
         clients = []
-        for i in range(N):
+        for i in range(n):
             clients.append(tftp.Client())
         seen = set()
 
@@ -559,7 +570,7 @@ class ClientBehaviourTests(unittest.TestCase):
             self.assertNotIn(c.sock.getsockname()[1], seen)
             seen.add(c.source_port)
 
-        self.assertEqual(len(seen), N)
+        self.assertEqual(len(seen), n)
 
     def test_ack_wrong_source_port(self):
         """
@@ -667,6 +678,7 @@ class ClientBehaviourTests(unittest.TestCase):
         srv.close()
         distracting_srv.close()
 
+
 class ServerBehaviourTests(unittest.TestCase):
     """
     Tests of server behaviour, aiming for compliance with RFC 1350 and
@@ -679,45 +691,46 @@ class ServerBehaviourTests(unittest.TestCase):
         self.assertEqual(tftp.KNOWN_PORT, server.listener_sock.getsockname()[1])
 
     def test_accept_good_rrq(self):
-        '''
+        """
         Tests that the server will accept well-formed read requests (RRQs).
-        '''
-        pass
+        """
+        self.fail()
 
     def test_decline_rrq_file_not_exist(self):
-        '''
+        """
         Tests that the server will reply with an error to a RRQ
         for a file that does not exist.
-        '''
-        pass
+        """
+        self.fail()
 
     def test_decline_rrq_cant_read_file(self):
-        '''
+        """
         Tests that the server will reply with an error to a RRQ
         for a file that the client is not allowed to read.
-        '''
-        pass
+        """
+        self.fail()
 
     def test_decline_rrq_locked_file(self):
-        '''
+        """
         Tests that the server will reply with an error to a RRQ
         for a file that currently has a lock on it, like a sqlite
         database or something.
-        '''
-        pass
+        """
+        self.fail()
 
     def test_accept_good_wrq(self):
-        '''
+        """
         Tests that the server will accept well-formed write requests (WRQs).
-        '''
-        pass
+        """
+        self.fail()
 
     def test_decline_wrq_file_exists(self):
-        '''
+        """
         Tests that the server will reply with an error to a WRQ that attempts
         to override an existing file.
-        '''
-        pass
+        """
+        self.fail()
+
 
 if __name__ == "__main__":
     unittest.main()

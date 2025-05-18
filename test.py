@@ -631,5 +631,46 @@ class ServerBehaviourTests(unittest.TestCase):
         self.assertIsNotNone(server.listener_sock)
         self.assertEqual(tftp.KNOWN_PORT, server.listener_sock.getsockname()[1])
 
+    def test_accept_good_rrq(self):
+        '''
+        Tests that the server will accept well-formed read requests (RRQs).
+        '''
+        pass
+
+    def test_decline_rrq_file_not_exist(self):
+        '''
+        Tests that the server will reply with an error to a RRQ
+        for a file that does not exist.
+        '''
+        pass
+
+    def test_decline_rrq_cant_read_file(self):
+        '''
+        Tests that the server will reply with an error to a RRQ
+        for a file that the client is not allowed to read.
+        '''
+        pass
+
+    def test_decline_rrq_locked_file(self):
+        '''
+        Tests that the server will reply with an error to a RRQ
+        for a file that currently has a lock on it, like a sqlite
+        database or something.
+        '''
+        pass
+
+    def test_accept_good_wrq(self):
+        '''
+        Tests that the server will accept well-formed write requests (WRQs).
+        '''
+        pass
+
+    def test_decline_wrq_file_exists(self):
+        '''
+        Tests that the server will reply with an error to a WRQ that attempts
+        to override an existing file.
+        '''
+        pass
+
 if __name__ == "__main__":
     unittest.main()

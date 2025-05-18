@@ -57,6 +57,7 @@ def handle_bad_parameters():
 
     return (file_name, ip_address)
 
+
 def handle_read():
     client = Client()
 
@@ -82,7 +83,7 @@ def handle_write():
         file_name, ip_address = handle_bad_parameters()
     except TypeError:
         return -1
-    
+
     success = client.send_file(ip_address, file_name)
 
     if success:

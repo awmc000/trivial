@@ -699,6 +699,7 @@ class ServerBehaviourTests(unittest.TestCase):
     def test_accept_good_rrq(self):
         """
         Tests that the server will accept well-formed read requests (RRQs).
+        FIXME: This test is not fully consistent, it fails sometimes (!!!!)
         """
         t = Thread(target=self.run_server)
         t.start()
@@ -706,23 +707,24 @@ class ServerBehaviourTests(unittest.TestCase):
         # Create faked out client on a random port
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.bind(("0.0.0.0", 0))
-        
+
         # Create a file
-        filepath = tftp.UPLOAD_DIR + 'quote.md'
-        with open(filepath, 'w+') as file:
+        filepath = tftp.UPLOAD_DIR + "quote.md"
+        with open(filepath, "w+") as file:
             file.write(
-                '# Quote\n'
+                "# Quote\n"
                 '"Computer Science is no more about computers than astronomy is about telescopes."'
-                ' - *Dijkstra*'
+                " - *Dijkstra*"
             )
 
         # Send a well formed read request for the file
-        rrq = tftp.create_connection_packet('r', filepath)
+        rrq = tftp.create_connection_packet("r", filepath)
 
         client.settimeout(2.0)
-        client.sendto(rrq, ('localhost', tftp.KNOWN_PORT))
+        client.sendto(rrq, ("localhost", tftp.KNOWN_PORT))
 
         # Make sure we receive block 1 which serves as ACK
+        # FIXME: The test Times out here in some cases, especially if run a few times in succession
         payload, (server_address, server_port) = client.recvfrom(1024)
 
         self.assertEqual(payload[:2], b"\x00\x03")

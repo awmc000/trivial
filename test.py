@@ -188,42 +188,6 @@ class ClientBehaviourTests(unittest.TestCase):
         self.assertEqual(client.destination_port, 12222)
         srv.close()
 
-    def test_receive(self):
-        """
-        Tests ability to receive packets and send acknowledgement.
-        """
-        client = tftp.Client()
-
-        # Set up socket to stand in for server
-        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        srv.bind(("0.0.0.0", 11111))
-
-        # requestWrite would also usually bind block_num
-        client.block_num = 0
-
-        # Create thread where client receives blocks
-        t = Thread(target=client.receive)
-        t.start()
-
-        # Send 5 blocks, 4 of size 512, and then one of 511 bytes
-        full_message = 64 * bytes("honeybee", "utf8")
-        short_message = full_message[:511]
-
-        for i in range(4):
-            # Send a block, receive ACK, check that it is correct
-            srv.sendto(full_message, ("127.0.0.1", client.source_port))
-            payload = srv.recvfrom(1024)[0]
-            acknowledged = int.from_bytes(payload[2:])
-            self.assertEqual(acknowledged, i + 1)
-
-        srv.sendto(short_message, ("127.0.0.1", client.source_port))
-        payload = srv.recvfrom(1024)[0]
-        acknowledged = int.from_bytes(payload[2:])
-        self.assertEqual(acknowledged, 5)
-        t.join(0.5)
-        self.assertEqual(client.block_num, 5)
-        srv.close()
-
     def test_read_request(self):
         """
         Tests client sending RRQ and server replying with first packet.
@@ -255,6 +219,89 @@ class ClientBehaviourTests(unittest.TestCase):
         # Verify what was received by the server
         self.assertEqual(tftp.create_ack_packet(1), payload)
         t.join(0.5)
+        srv.close()
+
+    def test_accepted_requests_return_true(self):
+        '''
+        Tests that the client methods return True when WRQs or RRQs are
+        accepted.
+        '''
+        # Create a thread function that acts like a server
+        # that approves N requests and then quits.
+        def nice_server(request_quota):
+            srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            srv.bind(("0.0.0.0", 11111))
+            
+            approved = 0
+            while approved < request_quota:
+                payload, (client_address, client_port) = srv.recvfrom(1024)
+
+                if payload[:2] == b'\x00\x01':
+                    # It's a read request, send a fake block 1.
+                    srv.sendto(
+                        tftp.create_data_packet(
+                            1, 
+                            bytes("Hello, World!", "utf8")
+                        ),
+                        (client_address, client_port),
+                    )
+                    approved += 1
+                elif payload[:2] == b'\x00\x02':
+                    # It's a write request, send a fake ack 0.
+                    srv.sendto(
+                        tftp.create_ack_packet(0),
+                        (client_address, client_port),
+                    )
+                    approved += 1
+            srv.close()
+
+        t = Thread(target=nice_server, args=[2])
+        t.start()
+
+        client = tftp.Client()
+
+        self.assertTrue(client.request_read('127.0.0.1', 'nexist.txt'))
+        self.assertTrue(client.request_write('127.0.0.1', 'nexist.txt'))
+        
+        t.join()
+
+    def test_receive(self):
+        """
+        Tests ability to receive packets and send acknowledgement.
+        """
+        client = tftp.Client()
+
+        # Set up socket to stand in for server
+        srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        srv.bind(("0.0.0.0", 11111))
+
+        # We will send 5 blocks, 4 of size 512, and then one of 511 bytes
+        full_message = 64 * bytes("honeybee", "utf8")
+        short_message = full_message[:511]
+
+        # request_write would also usually bind block_num
+        # request_write would also receive the first block
+        client.buffer = full_message
+        client.block_num = 1
+
+        # Create thread where client receives blocks
+        t = Thread(target=client.receive)
+        t.start()
+
+
+        for i in range(1, 4):
+            # Send a block, receive ACK, check that it is correct
+            srv.sendto(full_message, ("127.0.0.1", client.source_port))
+            payload = srv.recvfrom(1024)[0]
+            acknowledged = int.from_bytes(payload[2:])
+            self.assertEqual(acknowledged, i + 1)
+
+        srv.sendto(short_message, ("127.0.0.1", client.source_port))
+        payload = srv.recvfrom(1024)[0]
+        acknowledged = int.from_bytes(payload[2:])
+        self.assertEqual(acknowledged, 5)
+        t.join(0.5)
+        self.assertEqual(client.block_num, 5)
         srv.close()
 
     def test_send(self):

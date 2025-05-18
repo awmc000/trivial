@@ -165,6 +165,8 @@ class Client:
         self.destination_address = None
         self.destination_port = None
         self.block_num = None
+        self.buffer = None
+        self.multi_block = False
 
     def __del__(self):
         self.sock.close()
@@ -181,13 +183,36 @@ class Client:
 
     def request_read(self, address, filename):
         """
-        Makes a read request to `address`.
+        Makes a read request to `address`. Return True if accepted.
         """
         self.request_connection("r", address, filename)
+        self.buffer = bytes(0)
+        self.block_num = 0
+
+        # Receive initial packet
+        packet, (server_address, server_port) = self.sock.recvfrom(1024)
+
+        # TODO: Check for errors in block 0
+
+        # If the packet is full length, this will be a multi-block transfer
+        if len(packet) == 516:
+            self.multi_block = True
+
+        self.buffer += packet[4:]
+        self.block_num += 1
+
+        self.destination_address = server_address
+        self.destination_port = server_port
+
+        # Acknowledge packet
+        ack = create_ack_packet(self.block_num)
+        self.sock.sendto(ack, (server_address, server_port))
+
+        return True
 
     def request_write(self, address, filename):
         """
-        Makes a write request to `address`.
+        Makes a write request to `address`. Return True if accepted.
         """
         # We will be expecting ACK for block 0
         self.block_num = 0
@@ -210,6 +235,8 @@ class Client:
         # Ready for first real packet
         if self.block_num != 1:
             raise IOError(f"Block num {self.block_num} not 1 after receiving ack 0")
+
+        return True
 
     def receive_ack(self):
         """
@@ -257,28 +284,9 @@ class Client:
 
     def receive(self):
         """
-        After making a read request (RRQ) this function is called to
-        initiate and complete the transmission.
+        After making a read request (RRQ) and receiving block 0 this function 
+        is called to complete the transmission if there are >=2 blocks.
         """
-
-        buffer = bytes(0)
-        self.block_num = 0
-
-        # Receive initial packet
-        packet, (server_address, server_port) = self.sock.recvfrom(1024)
-        buffer += packet[4:]
-        self.block_num += 1
-
-        self.destination_address = server_address
-        self.destination_port = server_port
-
-        # Acknowledge packet
-        ack = create_ack_packet(self.block_num)
-        self.sock.sendto(ack, (server_address, server_port))
-
-        # Return now if initial packet is also ending packet
-        if len(packet) < 512:
-            return buffer
 
         # Else loop until rest are received
         while True:
@@ -288,7 +296,7 @@ class Client:
             if self.destination_port is None:
                 self.destination_port = server_port
 
-            buffer += packet[4:]
+            self.buffer += packet[4:]
             self.block_num += 1
 
             # TODO: Send error if packet has wrong source port!
@@ -301,7 +309,6 @@ class Client:
             # We are done if the payload size is less than 512 bytes
             if len(packet) < 512:
                 break
-        return buffer
 
     def get_file(self, address, filename):
         """
@@ -312,12 +319,13 @@ class Client:
         # Make a read request
         self.request_read(address, filename)
 
-        # Receive the file buffer (first packet is ACK)
-        file_buffer = self.receive()
+        # Receive the file buffer (first packet is block 0 which serves as acknowledgment)
+        if self.multi_block:
+            self.receive()
 
         # Save the file
         with open(DOWNLOAD_DIR + filename, "+w", encoding="utf8") as file:
-            file.write(str(file_buffer, encoding="utf8"))
+            file.write(str(self.buffer, encoding="utf8"))
 
     def send(self, buffer):
         """

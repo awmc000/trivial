@@ -21,7 +21,8 @@ tftp.py: client and server class definitions
 import os
 import select
 import socket
-from threading import Thread
+import sys
+from threading import Thread, Event
 
 MODES = ["netascii", "octet", "mail"]
 
@@ -400,6 +401,10 @@ class Server:
         self.listener_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.listener_sock.bind(("localhost", KNOWN_PORT))
 
+        # Signal that listener is bound, for test purposes
+        self.listener_ready = Event()
+        self.listener_ready.set()
+
         self.destination_address = None
         self.destination_port = None
         self.block_num = None
@@ -421,18 +426,13 @@ class Server:
         served = 0
         
         while True:
-            # print('server: listening for requests')
 
             if self.quota and served == self.quota:
-                # print('server: quitting listening for quota')
                 return
-            # else:
-                # print(f'served: {served}, quota: {self.quota}, quota is none: {self.quota is None}')
             
             payload, (client_address, client_port) = self.listener_sock.recvfrom(MAX_MESSAGE_LEN)
 
             type = payload[:2]
-            # print(f'server: received request with type {type}')
 
             if type == b"\x00\x01":
                 served += 1
@@ -445,7 +445,7 @@ class Server:
                 t.start()
                 self.thread_pool.append(t)
             else:
-                print('server: didn\'t recognize request type')
+                print('server: didn\'t recognize request type', file=sys.stderr)
 
     def receive_file(self, client_address, client_port, request_packet):
         """
@@ -464,18 +464,19 @@ class Server:
         filename = request_packet[2:null_pos]
         # print(f'sending file {filename}')
 
+        # create a server socket specific to the transaction served by this thread
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(('localhost', 0))
+
         # open file into a buffer
         buf = None
         try:
             with open(filename, 'r') as file:
                 buf = bytes(file.read(), encoding='utf8')
         except FileNotFoundError:
-            print('TODO: implement filenotfound')
-
-        # create a server socket specific to the transaction served by this thread
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind(('localhost', 0))
-
+            sock.sendto(create_error_packet(ErrorCodes.FILE_NOT_FOUND), (client_address, client_port))
+            sock.close()
+            return
 
         sent = 0
         to_send = len(buf)

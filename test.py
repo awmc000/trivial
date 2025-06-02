@@ -562,7 +562,7 @@ class ClientBehaviourTests(unittest.TestCase):
 
         n = 50
         clients = []
-        for i in range(n):
+        for _ in range(n):
             clients.append(tftp.Client())
         seen = set()
 
@@ -679,7 +679,10 @@ class ClientBehaviourTests(unittest.TestCase):
         srv.close()
         distracting_srv.close()
 
-def wait_for_udp_port(host: str, port: int, timeout: float = 2.0, interval: float = 0.05):
+
+def wait_for_udp_port(
+    host: str, port: int, timeout: float = 2.0, interval: float = 0.05
+):
     """
     Waits for a UDP server to bind to a given port.
     Returns True if successful, raises TimeoutError if not.
@@ -691,7 +694,7 @@ def wait_for_udp_port(host: str, port: int, timeout: float = 2.0, interval: floa
             # Send a harmless packet to the server
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.settimeout(interval)
-            s.sendto(b'\xC0\xDE', (host, port))  # dummy byte
+            s.sendto(b"\xc0\xde", (host, port))  # dummy byte
             # If no exception, assume port is open
             return True
         except (ConnectionRefusedError, OSError):
@@ -699,7 +702,10 @@ def wait_for_udp_port(host: str, port: int, timeout: float = 2.0, interval: floa
             time.sleep(interval)
         finally:
             s.close()
-    raise TimeoutError(f"Server did not bind to {host}:{port} within {timeout} seconds.")
+    raise TimeoutError(
+        f"Server did not bind to {host}:{port} within {timeout} seconds."
+    )
+
 
 class ServerBehaviourTests(unittest.TestCase):
     """
@@ -708,12 +714,17 @@ class ServerBehaviourTests(unittest.TestCase):
     """
 
     def run_server(self, quota: int = 1):
+        """
+        Helper function that runs a server; meant to be run in a separate thread for tests.
+        """
         server = tftp.Server()
         server.quota = quota
         server.listen()
-        # print('server test wrapper: done serving')
 
     def test_create_bind(self):
+        """
+        Tests that a server binds its listener socket as part of setup (the constructor).
+        """
         server = tftp.Server()
         self.assertIsNotNone(server.listener_sock)
         self.assertEqual(tftp.KNOWN_PORT, server.listener_sock.getsockname()[1])
@@ -749,7 +760,7 @@ class ServerBehaviourTests(unittest.TestCase):
 
         # Make sure we receive block 1 which serves as ACK
         # FIXME: The test Times out here in some cases, especially if run a few times in succession
-        payload, (server_address, server_port) = client.recvfrom(1024)
+        payload = client.recv(1024)
 
         self.assertEqual(payload[:2], b"\x00\x03")
         # print(f'packet type check: {payload[:2] == b"\x00\x03"}')
@@ -772,12 +783,12 @@ class ServerBehaviourTests(unittest.TestCase):
         client.bind(("0.0.0.0", 0))
 
         # Send a well formed read request for the file
-        rrq = tftp.create_connection_packet("r", 'dontexist.txt')
+        rrq = tftp.create_connection_packet("r", "dontexist.txt")
 
         client.settimeout(2.0)
         client.sendto(rrq, ("localhost", tftp.KNOWN_PORT))
 
-        payload, (server_address, server_port) = client.recvfrom(1024)
+        payload = client.recv(1024)
 
         # Check that message type is 5 ERROR
         self.assertEqual(payload[:2], b"\x00\x05")
@@ -801,12 +812,12 @@ class ServerBehaviourTests(unittest.TestCase):
         client.bind(("0.0.0.0", 0))
 
         # Send a well formed read request for a file a user program can't read.
-        rrq = tftp.create_connection_packet("r", '/etc/shadow')
-        
+        rrq = tftp.create_connection_packet("r", "/etc/shadow")
+
         client.settimeout(2.0)
         client.sendto(rrq, ("localhost", tftp.KNOWN_PORT))
 
-        payload, (server_address, server_port) = client.recvfrom(1024)
+        payload = client.recv(1024)
 
         # Check that message type is 5 ERROR
         self.assertEqual(payload[:2], b"\x00\x05")
@@ -821,12 +832,102 @@ class ServerBehaviourTests(unittest.TestCase):
         """
         Tests that the server will accept well-formed write requests (WRQs).
         """
+        t = Thread(target=self.run_server)
+        t.start()
+        wait_for_udp_port("localhost", tftp.KNOWN_PORT)
+
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        client.bind(("0.0.0.0", 0))
+
+        # Send wrq and expect ACK 0
+        wrq = tftp.create_connection_packet("w", tftp.UPLOAD_DIR + "garden-verses.txt")
+
+        client.settimeout(2.0)
+        client.sendto(wrq, ("localhost", tftp.KNOWN_PORT))
+
+        payload = client.recv(1024)
+
+        self.assertEqual(payload, b"\x00\x04\x00\x00")
+
+        # clean up
+        t.join()
+        client.close()
+
+    def test_complete_valid_wrq(self):
+        """
+        Tests that the server will accept AND fully complete a valid WRQ file transfer.
+        """
+        t = Thread(target=self.run_server)
+        t.start()
+        wait_for_udp_port("localhost", tftp.KNOWN_PORT)
+
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        client.bind(("0.0.0.0", 0))
+
+        # Send wrq and expect ACK 0
+        wrq = tftp.create_connection_packet("w", tftp.UPLOAD_DIR + "garden-verses.txt")
+
+        client.settimeout(2.0)
+        client.sendto(wrq, ("localhost", tftp.KNOWN_PORT))
+
+        payload, (initial_server_address, initial_server_port) = client.recvfrom(1024)
+
+        self.assertEqual(payload, b"\x00\x04\x00\x00")
+
+        # Send blocks and expect ACK 1 to ACK N
+        buf = bytes(0)
+        block_num = 1
+        with open(tftp.UPLOAD_DIR + "garden-verses.txt", "w+", encoding="utf8") as file:
+            buf += bytes(file.read(), encoding="utf8")
+
+        while len(buf) > 0:
+            block = tftp.create_data_packet(block_num, buf[:512])
+            buf = buf[512:]
+            client.sendto(block, ("localhost", tftp.KNOWN_PORT))
+            payload, (server_address, server_port) = client.recvfrom(1024)
+
+            self.assertEqual(server_address, initial_server_address)
+            self.assertNotEqual(server_port, tftp.KNOWN_PORT)
+            self.assertNotEqual(server_port, initial_server_port)
+
+            self.assertEqual(payload[:2], b"\x00\x04")
+            self.assertEqual(payload[2:4], block_num.to_bytes(2))
+
+            block_num += 1
+
+        # clean up
+        t.join()
+        client.close()
 
     def test_decline_wrq_file_exists(self):
         """
         Tests that the server will reply with an error to a WRQ that attempts
         to override an existing file.
         """
+        # TODO : make WRQ for "doc.txt", should be rejected b/c it already exists.
+        t = Thread(target=self.run_server)
+        t.start()
+        wait_for_udp_port("localhost", tftp.KNOWN_PORT)
+
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        client.bind(("0.0.0.0", 0))
+
+        # Send wrq and expect ACK 0
+        wrq = tftp.create_connection_packet("w", tftp.UPLOAD_DIR + "garden-verses.txt")
+
+        client.settimeout(2.0)
+        client.sendto(wrq, ("localhost", tftp.KNOWN_PORT))
+
+        payload = client.recv(1024)
+
+        # Check that message type is 5 ERROR
+        self.assertEqual(payload[:2], b"\x00\x05")
+
+        # Check that error type is 6 FILE ALREADY EXISTS
+        self.assertEqual(payload[2:4], b"\x00\x06")
+
+        client.close()
+        t.join()
 
 
 if __name__ == "__main__":

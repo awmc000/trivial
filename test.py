@@ -20,12 +20,12 @@ test.py: unit tests for all parts of the program
 
 # Modules from std library
 from queue import Queue
+from threading import Thread
 import select
 import time
 import unittest
 import socket
 import os
-from threading import Thread
 
 # Modules from this project
 import tftp
@@ -779,7 +779,12 @@ class ServerBehaviourTests(unittest.TestCase):
 
         payload, (server_address, server_port) = client.recvfrom(1024)
 
+        # Check that message type is 5 ERROR
         self.assertEqual(payload[:2], b"\x00\x05")
+
+        # Check that error type is 1 FILE NOT FOUND
+        self.assertEqual(payload[2:4], b"\x00\x01")
+
         t.join()
         client.close()
 
@@ -788,13 +793,29 @@ class ServerBehaviourTests(unittest.TestCase):
         Tests that the server will reply with an error to a RRQ
         for a file that the client is not allowed to read.
         """
+        t = Thread(target=self.run_server)
+        t.start()
+        wait_for_udp_port("localhost", tftp.KNOWN_PORT)
 
-    def test_decline_rrq_locked_file(self):
-        """
-        Tests that the server will reply with an error to a RRQ
-        for a file that currently has a lock on it, like a sqlite
-        database or something.
-        """
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        client.bind(("0.0.0.0", 0))
+
+        # Send a well formed read request for a file a user program can't read.
+        rrq = tftp.create_connection_packet("r", '/etc/shadow')
+        
+        client.settimeout(2.0)
+        client.sendto(rrq, ("localhost", tftp.KNOWN_PORT))
+
+        payload, (server_address, server_port) = client.recvfrom(1024)
+
+        # Check that message type is 5 ERROR
+        self.assertEqual(payload[:2], b"\x00\x05")
+
+        # Check that error type is 2 ACCESS VIOLATION
+        self.assertEqual(payload[2:4], b"\x00\x02")
+
+        t.join()
+        client.close()
 
     def test_accept_good_wrq(self):
         """

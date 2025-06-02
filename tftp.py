@@ -462,7 +462,6 @@ class Server:
         # find 0 byte that delimits filename
         null_pos = request_packet[2:].find(b"\x00") + 2
         filename = request_packet[2:null_pos]
-        # print(f'sending file {filename}')
 
         # create a server socket specific to the transaction served by this thread
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -477,6 +476,10 @@ class Server:
             sock.sendto(create_error_packet(ErrorCodes.FILE_NOT_FOUND), (client_address, client_port))
             sock.close()
             return
+        except PermissionError:
+            sock.sendto(create_error_packet(ErrorCodes.ACCESS_VIOLATION), (client_address, client_port))
+            sock.close()
+            return                        
 
         sent = 0
         to_send = len(buf)

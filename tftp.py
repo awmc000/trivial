@@ -453,6 +453,9 @@ class Server:
         """
         block_num = 0
 
+        null_pos = request_packet[2:].find(b"\x00") + 2
+        filename = request_packet[2:null_pos]
+
     def send_file(self, client_address, client_port, request_packet):
         """
         Responds to a RRQ from a client, completes the transaction and returns.
@@ -461,7 +464,7 @@ class Server:
 
         # find 0 byte that delimits filename
         null_pos = request_packet[2:].find(b"\x00") + 2
-        filename = request_packet[2:null_pos]
+        filename = bytes(UPLOAD_DIR, encoding='utf8') + request_packet[2:null_pos]
 
         # create a server socket specific to the transaction served by this thread
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

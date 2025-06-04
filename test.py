@@ -318,7 +318,7 @@ class ClientBehaviourTests(unittest.TestCase):
 
     def test_send(self):
         """
-        Tests that client can send a multi-block buffer to the server properly
+        Client can send a multi-block buffer to the server properly
         """
         client = tftp.Client()
 
@@ -556,7 +556,7 @@ class ClientBehaviourTests(unittest.TestCase):
 
     def test_client_ports_random(self):
         """
-        Tests that client ports are selected randomly, by making N clients
+        Client ports are selected randomly, by making N clients
         and testing that they have N different ports.
         """
 
@@ -731,7 +731,7 @@ class ServerBehaviourTests(unittest.TestCase):
 
     def test_accept_good_rrq(self):
         """
-        Tests that the server will accept well-formed read requests (RRQs).
+        Server will accept well-formed read requests (RRQs).
         FIXME: This test is not fully consistent, it fails sometimes (!!!!)
         """
         t = Thread(target=self.run_server)
@@ -753,7 +753,7 @@ class ServerBehaviourTests(unittest.TestCase):
             )
 
         # Send a well formed read request for the file
-        rrq = tftp.create_connection_packet("r", filepath)
+        rrq = tftp.create_connection_packet("r", "quote.md")
 
         client.settimeout(2.0)
         client.sendto(rrq, ("localhost", tftp.KNOWN_PORT))
@@ -771,7 +771,7 @@ class ServerBehaviourTests(unittest.TestCase):
 
     def test_decline_rrq_file_not_exist(self):
         """
-        Tests that the server will reply with an error to a RRQ
+        Server will reply with an error to a RRQ
         for a file that does not exist.
         """
         t = Thread(target=self.run_server)
@@ -812,7 +812,7 @@ class ServerBehaviourTests(unittest.TestCase):
         client.bind(("0.0.0.0", 0))
 
         # Send a well formed read request for a file a user program can't read.
-        rrq = tftp.create_connection_packet("r", "/etc/shadow")
+        rrq = tftp.create_connection_packet("r", "unreadable.txt")
 
         client.settimeout(2.0)
         client.sendto(rrq, ("localhost", tftp.KNOWN_PORT))
@@ -830,7 +830,7 @@ class ServerBehaviourTests(unittest.TestCase):
 
     def test_accept_good_wrq(self):
         """
-        Tests that the server will accept well-formed write requests (WRQs).
+        Server will accept well-formed write requests (WRQs).
         """
         t = Thread(target=self.run_server)
         t.start()
@@ -840,7 +840,7 @@ class ServerBehaviourTests(unittest.TestCase):
         client.bind(("0.0.0.0", 0))
 
         # Send wrq and expect ACK 0
-        wrq = tftp.create_connection_packet("w", tftp.UPLOAD_DIR + "garden-verses.txt")
+        wrq = tftp.create_connection_packet("w", "garden-verses.txt")
 
         client.settimeout(2.0)
         client.sendto(wrq, ("localhost", tftp.KNOWN_PORT))
@@ -855,7 +855,7 @@ class ServerBehaviourTests(unittest.TestCase):
 
     def test_complete_valid_wrq(self):
         """
-        Tests that the server will accept AND fully complete a valid WRQ file transfer.
+        Server will accept AND fully complete a valid WRQ file transfer.
         """
         t = Thread(target=self.run_server)
         t.start()
@@ -865,7 +865,7 @@ class ServerBehaviourTests(unittest.TestCase):
         client.bind(("0.0.0.0", 0))
 
         # Send wrq and expect ACK 0
-        wrq = tftp.create_connection_packet("w", tftp.UPLOAD_DIR + "garden-verses.txt")
+        wrq = tftp.create_connection_packet("w", "garden-verses.txt")
 
         client.settimeout(2.0)
         client.sendto(wrq, ("localhost", tftp.KNOWN_PORT))
@@ -901,8 +901,7 @@ class ServerBehaviourTests(unittest.TestCase):
 
     def test_decline_wrq_file_exists(self):
         """
-        Tests that the server will reply with an error to a WRQ that attempts
-        to override an existing file.
+        Server will reply with an error to a WRQ for an existing file.
         """
         # TODO : make WRQ for "doc.txt", should be rejected b/c it already exists.
         t = Thread(target=self.run_server)

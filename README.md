@@ -16,6 +16,10 @@ transported quickly and reliably using the Trivial File Transfer Protocol.
 - A client or server sends files *from* the `share` directory.
 - A client or server retrieves files *to* the `downloads` directory.
 - They will read and write to these directories only.
+- The filepath arguments received will be interpreted as relative paths from the appropriate directory.
+    - This means that access violations will only occur if there is a file in the share dir the program
+    is not allowed to read.
+    - `share/unreadable.txt` is a text file with 000 permissions made for this purpose.
 - Each host running the program has both the client and server. It is a single application used via CLI.
 
 ## Usage and example output

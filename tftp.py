@@ -456,6 +456,19 @@ class Server:
         null_pos = request_packet[2:].find(b"\x00") + 2
         filename = request_packet[2:null_pos]
 
+        # Create a server socket specific to the transaction served by this thread
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(('localhost', 0))
+
+        # Return a 6 FILE EXISTS error if there's already a file by that name in /downloaded 
+        if os.path.isfile(DOWNLOAD_DIR + str(filename, encoding='utf8')):
+            sock.sendto(create_error_packet(ErrorCodes.FILE_EXISTS), (client_address, client_port))
+            sock.close()
+            return
+        
+        sock.sendto(create_error_packet(ErrorCodes.NOT_DEFINED, 'Server WRQ handling not implemented!'), (client_address, client_port))
+        sock.close()
+
     def send_file(self, client_address, client_port, request_packet):
         """
         Responds to a RRQ from a client, completes the transaction and returns.

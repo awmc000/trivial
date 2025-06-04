@@ -912,7 +912,7 @@ class ServerBehaviourTests(unittest.TestCase):
         client.bind(("0.0.0.0", 0))
 
         # Send wrq and expect ACK 0
-        wrq = tftp.create_connection_packet("w", tftp.UPLOAD_DIR + "garden-verses.txt")
+        wrq = tftp.create_connection_packet("w", "doc.txt")
 
         client.settimeout(2.0)
         client.sendto(wrq, ("localhost", tftp.KNOWN_PORT))

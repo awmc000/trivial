@@ -152,6 +152,7 @@ OPERATION_TIMEOUT = 0.5
 OPERATION_ATTEMPTS = 5
 MAX_MESSAGE_LEN = 516
 
+
 class Client:
     """
     TFTP client. Keeps track of connection state such as current block num and packet to retransmit.
@@ -417,9 +418,9 @@ class Server:
     def shutdown(self):
         """Explicitly shut down the server and clean up resources."""
         # Close the listener socket to break out of recvfrom()
-        if hasattr(self, 'listener_sock'):
+        if hasattr(self, "listener_sock"):
             self.listener_sock.close()
-        
+
         # Join all worker threads with timeout
         for thread in self.thread_pool:
             if thread.is_alive():
@@ -432,28 +433,35 @@ class Server:
         Waits for incoming transfer requests, handling them in a separate thread.
         """
         served = 0
-        
+
         while True:
 
             if self.quota and served == self.quota:
                 return
-            
-            payload, (client_address, client_port) = self.listener_sock.recvfrom(MAX_MESSAGE_LEN)
+
+            payload, (client_address, client_port) = self.listener_sock.recvfrom(
+                MAX_MESSAGE_LEN
+            )
 
             type = payload[:2]
 
             if type == b"\x00\x01":
                 served += 1
-                t = Thread(target=self.send_file, args=[client_address, client_port, payload])
+                t = Thread(
+                    target=self.send_file, args=[client_address, client_port, payload]
+                )
                 t.start()
                 self.thread_pool.append(t)
             elif type == b"\x00\x02":
                 served += 1
-                t = Thread(target=self.receive_file, args=[client_address, client_port, payload])
+                t = Thread(
+                    target=self.receive_file,
+                    args=[client_address, client_port, payload],
+                )
                 t.start()
                 self.thread_pool.append(t)
             else:
-                print('server: didn\'t recognize request type', file=sys.stderr)
+                print("server: didn't recognize request type", file=sys.stderr)
 
     def receive_file(self, client_address, client_port, request_packet):
         """
@@ -466,12 +474,15 @@ class Server:
 
         # Create a server socket specific to the transaction served by this thread
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind(('localhost', 0))
+        sock.bind(("localhost", 0))
         sock.settimeout(2.0)
 
-        # Return a 6 FILE EXISTS error if there's already a file by that name in /downloaded 
-        if os.path.isfile(DOWNLOAD_DIR + str(filename, encoding='utf8')):
-            sock.sendto(create_error_packet(ErrorCodes.FILE_EXISTS), (client_address, client_port))
+        # Return a 6 FILE EXISTS error if there's already a file by that name in /downloaded
+        if os.path.isfile(DOWNLOAD_DIR + str(filename, encoding="utf8")):
+            sock.sendto(
+                create_error_packet(ErrorCodes.FILE_EXISTS),
+                (client_address, client_port),
+            )
             sock.close()
             return
 
@@ -488,7 +499,7 @@ class Server:
             try:
                 block, (client_address, client_port) = sock.recvfrom(MAX_MESSAGE_LEN)
             except TimeoutError:
-                print('server WRQ: timed out waiting for a block')
+                print("server WRQ: timed out waiting for a block")
                 sock.close()
                 return
 
@@ -517,25 +528,31 @@ class Server:
 
         # find 0 byte that delimits filename
         null_pos = request_packet[2:].find(b"\x00") + 2
-        filename = bytes(UPLOAD_DIR, encoding='utf8') + request_packet[2:null_pos]
+        filename = bytes(UPLOAD_DIR, encoding="utf8") + request_packet[2:null_pos]
 
         # create a server socket specific to the transaction served by this thread
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind(('localhost', 0))
+        sock.bind(("localhost", 0))
 
         # open file into a buffer
         buf = None
         try:
-            with open(filename, 'r') as file:
-                buf = bytes(file.read(), encoding='utf8')
+            with open(filename, "r") as file:
+                buf = bytes(file.read(), encoding="utf8")
         except FileNotFoundError:
-            sock.sendto(create_error_packet(ErrorCodes.FILE_NOT_FOUND), (client_address, client_port))
+            sock.sendto(
+                create_error_packet(ErrorCodes.FILE_NOT_FOUND),
+                (client_address, client_port),
+            )
             sock.close()
             return
         except PermissionError:
-            sock.sendto(create_error_packet(ErrorCodes.ACCESS_VIOLATION), (client_address, client_port))
+            sock.sendto(
+                create_error_packet(ErrorCodes.ACCESS_VIOLATION),
+                (client_address, client_port),
+            )
             sock.close()
-            return                        
+            return
 
         sent = 0
         to_send = len(buf)

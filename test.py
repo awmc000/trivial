@@ -720,6 +720,7 @@ class ServerBehaviourTests(unittest.TestCase):
         server = tftp.Server()
         server.quota = quota
         server.listen()
+        server.shutdown()
 
     def test_create_bind(self):
         """
@@ -728,6 +729,7 @@ class ServerBehaviourTests(unittest.TestCase):
         server = tftp.Server()
         self.assertIsNotNone(server.listener_sock)
         self.assertEqual(tftp.KNOWN_PORT, server.listener_sock.getsockname()[1])
+        server.shutdown()
 
     def test_accept_good_rrq(self):
         """
@@ -877,7 +879,7 @@ class ServerBehaviourTests(unittest.TestCase):
         # Send blocks and expect ACK 1 to ACK N
         buf = bytes(0)
         block_num = 1
-        with open(tftp.UPLOAD_DIR + "garden-verses.txt", "w+", encoding="utf8") as file:
+        with open(tftp.UPLOAD_DIR + "garden-verses.txt", "r", encoding="utf8") as file:
             buf += bytes(file.read(), encoding="utf8")
 
         while len(buf) > 0:

@@ -41,11 +41,11 @@ class Opcodes:
     Enumeration of TFTP message types.
     """
 
-    READ_REQUEST = int(1).to_bytes(2)
-    WRITE_REQUEST = int(2).to_bytes(2)
-    DATA = int(3).to_bytes(2)
-    ACK = int(4).to_bytes(2)
-    ERROR = int(5).to_bytes(2)
+    READ_REQUEST = int(1).to_bytes(2, byteorder="big")
+    WRITE_REQUEST = int(2).to_bytes(2, byteorder="big")
+    DATA = int(3).to_bytes(2, byteorder="big")
+    ACK = int(4).to_bytes(2, byteorder="big")
+    ERROR = int(5).to_bytes(2, byteorder="big")
 
 
 def create_connection_packet(message_type: str, filename: str, mode: str = "octet"):

@@ -414,10 +414,18 @@ class Server:
         self.thread_pool = []
         self.last_block = None
 
-    def __del__(self):
-        self.listener_sock.close()
-        # for t in self.thread_pool:
-            # t.join()
+    def shutdown(self):
+        """Explicitly shut down the server and clean up resources."""
+        # Close the listener socket to break out of recvfrom()
+        if hasattr(self, 'listener_sock'):
+            self.listener_sock.close()
+        
+        # Join all worker threads with timeout
+        for thread in self.thread_pool:
+            if thread.is_alive():
+                thread.join(timeout=2.0)  # 5 second timeout
+                if thread.is_alive():
+                    print(f"Warning: Thread {thread.name} didn't terminate cleanly")
 
     def listen(self):
         """
@@ -459,14 +467,46 @@ class Server:
         # Create a server socket specific to the transaction served by this thread
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.bind(('localhost', 0))
+        sock.settimeout(2.0)
 
         # Return a 6 FILE EXISTS error if there's already a file by that name in /downloaded 
         if os.path.isfile(DOWNLOAD_DIR + str(filename, encoding='utf8')):
             sock.sendto(create_error_packet(ErrorCodes.FILE_EXISTS), (client_address, client_port))
             sock.close()
             return
-        
-        sock.sendto(create_error_packet(ErrorCodes.NOT_DEFINED, 'Server WRQ handling not implemented!'), (client_address, client_port))
+
+        # Prepare transfer information
+        block_num = 0
+
+        # Send ACK 0
+        sock.sendto(create_ack_packet(block_num), (client_address, client_port))
+
+        # Receive blocks into a buffer
+        buf = bytes(0)
+
+        while True:
+            try:
+                block, (client_address, client_port) = sock.recvfrom(MAX_MESSAGE_LEN)
+            except TimeoutError:
+                print('server WRQ: timed out waiting for a block')
+                sock.close()
+                return
+
+            # TODO: Handle message from wrong TID (port).
+
+            # Strip TFTP header
+            block_content = block[4:]
+
+            block_num += 1
+            sock.sendto(create_ack_packet(block_num), (client_address, client_port))
+
+            if len(block_content) < 512:
+                break
+
+        with open(DOWNLOAD_DIR, "r") as file:
+            file.write(buf)
+
+        # sock.sendto(create_error_packet(ErrorCodes.NOT_DEFINED, 'Server WRQ handling not implemented!'), (client_address, client_port))
         sock.close()
 
     def send_file(self, client_address, client_port, request_packet):

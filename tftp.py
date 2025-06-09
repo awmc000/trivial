@@ -329,7 +329,7 @@ class Client:
             self.receive()
 
         # Save the file
-        with open(DOWNLOAD_DIR + filename, "+w", encoding="utf8") as file:
+        with open(os.path.join(DOWNLOAD_DIR, filename), "+w", encoding="utf8") as file:
             file.write(str(self.buffer, encoding="utf8"))
 
         return True
@@ -378,7 +378,7 @@ class Client:
         if not os.path.isfile(UPLOAD_DIR + filename):
             return False
 
-        with open(UPLOAD_DIR + filename, "r+", encoding="utf8") as file:
+        with open(os.path.join(UPLOAD_DIR, filename), "r+", encoding="utf8") as file:
             buf = bytes(file.read(), encoding="utf8")
 
         # Make a write request
@@ -408,12 +408,10 @@ class Server:
 
         self.destination_address = None
         self.destination_port = None
-        self.block_num = None
 
         # If a quota is set, the server will handle `quota` transactions then quit.
         self.quota = None
         self.thread_pool = []
-        self.last_block = None
 
     def shutdown(self):
         """Explicitly shut down the server and clean up resources."""
@@ -443,16 +441,17 @@ class Server:
                 MAX_MESSAGE_LEN
             )
 
-            type = payload[:2]
+            # Either a RRQ (1) or a WRQ (2), both padded to 2 bytes.
+            request_type = payload[:2]
 
-            if type == b"\x00\x01":
+            if request_type == b"\x00\x01":
                 served += 1
                 t = Thread(
                     target=self.send_file, args=[client_address, client_port, payload]
                 )
                 t.start()
                 self.thread_pool.append(t)
-            elif type == b"\x00\x02":
+            elif request_type == b"\x00\x02":
                 served += 1
                 t = Thread(
                     target=self.receive_file,
@@ -514,10 +513,9 @@ class Server:
             if len(block_content) < 512:
                 break
 
-        with open(DOWNLOAD_DIR, "r") as file:
+        with open(DOWNLOAD_DIR, "r", encoding="utf8") as file:
             file.write(buf)
 
-        # sock.sendto(create_error_packet(ErrorCodes.NOT_DEFINED, 'Server WRQ handling not implemented!'), (client_address, client_port))
         sock.close()
 
     def send_file(self, client_address, client_port, request_packet):
@@ -528,7 +526,7 @@ class Server:
 
         # find 0 byte that delimits filename
         null_pos = request_packet[2:].find(b"\x00") + 2
-        filename = bytes(UPLOAD_DIR, encoding="utf8") + request_packet[2:null_pos]
+        filename = UPLOAD_DIR + str(request_packet[2:null_pos], encoding="utf8")
 
         # create a server socket specific to the transaction served by this thread
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -537,7 +535,7 @@ class Server:
         # open file into a buffer
         buf = None
         try:
-            with open(filename, "r") as file:
+            with open(filename, "r", encoding="utf8") as file:
                 buf = bytes(file.read(), encoding="utf8")
         except FileNotFoundError:
             sock.sendto(

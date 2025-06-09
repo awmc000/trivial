@@ -429,7 +429,7 @@ class ClientBehaviourTests(unittest.TestCase):
         srv.close()
 
         with open(
-            tftp.DOWNLOAD_DIR + "garden-verses.txt", "w+", encoding="utf8"
+            os.path.join(tftp.DOWNLOAD_DIR, "garden-verses.txt"), "w+", encoding="utf8"
         ) as file:
             file.write(str(file_buffer, encoding="utf8"))
         self.assertTrue(os.path.isfile(tftp.DOWNLOAD_DIR + "garden-verses.txt"))
@@ -455,7 +455,9 @@ class ClientBehaviourTests(unittest.TestCase):
         big_block = bytes("honeybee", "utf8") * 64
         lil_block = big_block[:504]
         buffer = big_block + big_block + big_block + lil_block
-        with open(tftp.UPLOAD_DIR + "fulltest.txt", "w+") as tempfile:
+        with open(
+            os.path.join(tftp.UPLOAD_DIR, "fulltest.txt"), "w+", encoding="utf8"
+        ) as tempfile:
             tempfile.write(str(buffer, encoding="utf8"))
         send_attempt_result = Queue()
 
@@ -521,7 +523,7 @@ class ClientBehaviourTests(unittest.TestCase):
         big_block = bytes("honeybee", "utf8") * 64
         lil_block = big_block[:504]
         buffer = big_block + big_block + big_block + lil_block
-        with open(tftp.UPLOAD_DIR + "fulltest.txt", "w+") as tempfile:
+        with open(tftp.UPLOAD_DIR + "fulltest.txt", "w+", encoding="utf8") as tempfile:
             tempfile.write(str(buffer, encoding="utf8"))
 
         send_attempt_result = Queue()
@@ -747,7 +749,7 @@ class ServerBehaviourTests(unittest.TestCase):
 
         # Create a file
         filepath = tftp.UPLOAD_DIR + "quote.md"
-        with open(filepath, "w+") as file:
+        with open(filepath, "w+", encoding="utf8") as file:
             file.write(
                 "# Quote\n"
                 '"Computer Science is no more about computers than astronomy is about telescopes."'
@@ -879,7 +881,9 @@ class ServerBehaviourTests(unittest.TestCase):
         # Send blocks and expect ACK 1 to ACK N
         buf = bytes(0)
         block_num = 1
-        with open(tftp.UPLOAD_DIR + "garden-verses.txt", "r", encoding="utf8") as file:
+        with open(
+            os.path.join(tftp.UPLOAD_DIR, "garden-verses.txt"), "r", encoding="utf8"
+        ) as file:
             buf += bytes(file.read(), encoding="utf8")
 
         while len(buf) > 0:

@@ -469,7 +469,7 @@ class Server:
         block_num = 0
 
         null_pos = request_packet[2:].find(b"\x00") + 2
-        filename = request_packet[2:null_pos]
+        filename = str(request_packet[2:null_pos], encoding="utf8")
 
         # Create a server socket specific to the transaction served by this thread
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -477,7 +477,7 @@ class Server:
         sock.settimeout(2.0)
 
         # Return a 6 FILE EXISTS error if there's already a file by that name in /downloaded
-        if os.path.isfile(DOWNLOAD_DIR + str(filename, encoding="utf8")):
+        if os.path.isfile(DOWNLOAD_DIR + filename):
             sock.sendto(
                 create_error_packet(ErrorCodes.FILE_EXISTS),
                 (client_address, client_port),
@@ -506,15 +506,15 @@ class Server:
 
             # Strip TFTP header
             block_content = block[4:]
-
+            buf += block_content
             block_num += 1
             sock.sendto(create_ack_packet(block_num), (client_address, client_port))
 
             if len(block_content) < 512:
                 break
 
-        with open(DOWNLOAD_DIR, "r", encoding="utf8") as file:
-            file.write(buf)
+        with open(DOWNLOAD_DIR + filename, "w", encoding="utf8") as file:
+            file.write(str(buf, encoding="utf8"))
 
         sock.close()
 

@@ -21,6 +21,7 @@ test.py: unit tests for all parts of the program
 # Modules from std library
 from queue import Queue
 from threading import Thread
+from math import ceil
 import select
 import time
 import unittest
@@ -724,6 +725,15 @@ class ServerBehaviourTests(unittest.TestCase):
         server.listen()
         server.shutdown()
 
+    def last_block_num(self, file):
+        """
+        Returns what the final block num should be after transferring a file. 
+        """
+        byte_size = os.path.getsize(file)
+        final_block_num = ceil(byte_size / 512)
+        if byte_size % 512 == 0: final_block_num += 1
+        return final_block_num
+
     def test_create_bind(self):
         """
         Tests that a server binds its listener socket as part of setup (the constructor).
@@ -860,7 +870,26 @@ class ServerBehaviourTests(unittest.TestCase):
     def test_complete_valid_wrq(self):
         """
         Server will accept AND fully complete a valid WRQ file transfer.
+        As a reminder, in the WRQ the CLIENT is sending the SERVER a file.
+        The exchange works like this:
+        CLIENT: WRQ garden-verses.txt | Can I write garden-verses.txt?
+        SERVER: ACK 0  | Yes
+        CLIENT: DATA 1 (payload size exactly 512 bytes) 
+        SERVER: ACK  1
+                .
+                .
+                .
+        CLIENT: DATA N (payload size [0, 511] bytes)
+        SERVER: ACK  N
+        Server writes to file in tftp.DOWNLOAD_DIR and transaction complete.
         """
+
+        # Delete file if left over from aborted test
+        try:
+            os.remove(tftp.DOWNLOAD_DIR + "garden-verses.txt")
+        except FileNotFoundError:
+            pass
+
         t = Thread(target=self.run_server)
         t.start()
         wait_for_udp_port("localhost", tftp.KNOWN_PORT)
@@ -868,7 +897,7 @@ class ServerBehaviourTests(unittest.TestCase):
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.bind(("0.0.0.0", 0))
 
-        # Send wrq and expect ACK 0
+        # Send wrq from client and expect ACK 0
         wrq = tftp.create_connection_packet("w", "garden-verses.txt")
 
         client.settimeout(2.0)
@@ -886,22 +915,31 @@ class ServerBehaviourTests(unittest.TestCase):
         ) as file:
             buf += bytes(file.read(), encoding="utf8")
 
+        server_address, server_port = initial_server_address, initial_server_port
+
         while len(buf) > 0:
             block = tftp.create_data_packet(block_num, buf[:512])
             buf = buf[512:]
-            client.sendto(block, ("localhost", tftp.KNOWN_PORT))
+            client.sendto(block, (server_address, server_port))
             payload, (server_address, server_port) = client.recvfrom(1024)
 
             self.assertEqual(server_address, initial_server_address)
             self.assertNotEqual(server_port, tftp.KNOWN_PORT)
-            self.assertNotEqual(server_port, initial_server_port)
 
             self.assertEqual(payload[:2], b"\x00\x04")
             self.assertEqual(payload[2:4], block_num.to_bytes(2))
 
-            block_num += 1
+            if len(block) == 516: block_num += 1
+
+        # Ensure that we received final ACK for last block
+        self.assertEqual(block_num, self.last_block_num(os.path.join(tftp.UPLOAD_DIR, 'garden-verses.txt')))
+
+        with open(os.path.join(tftp.UPLOAD_DIR, 'garden-verses.txt'), 'r') as older_file:
+            with open(os.path.join(tftp.DOWNLOAD_DIR, 'garden-verses.txt'), 'r') as newer_file:
+                self.assertEqual(older_file.read()[:200], newer_file.read()[:200])
 
         # clean up
+        os.remove(tftp.DOWNLOAD_DIR + "garden-verses.txt")
         t.join()
         client.close()
 

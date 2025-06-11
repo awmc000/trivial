@@ -727,11 +727,12 @@ class ServerBehaviourTests(unittest.TestCase):
 
     def last_block_num(self, file):
         """
-        Returns what the final block num should be after transferring a file. 
+        Returns what the final block num should be after transferring a file.
         """
         byte_size = os.path.getsize(file)
         final_block_num = ceil(byte_size / 512)
-        if byte_size % 512 == 0: final_block_num += 1
+        if byte_size % 512 == 0:
+            final_block_num += 1
         return final_block_num
 
     def test_create_bind(self):
@@ -874,7 +875,7 @@ class ServerBehaviourTests(unittest.TestCase):
         The exchange works like this:
         CLIENT: WRQ garden-verses.txt | Can I write garden-verses.txt?
         SERVER: ACK 0  | Yes
-        CLIENT: DATA 1 (payload size exactly 512 bytes) 
+        CLIENT: DATA 1 (payload size exactly 512 bytes)
         SERVER: ACK  1
                 .
                 .
@@ -929,14 +930,24 @@ class ServerBehaviourTests(unittest.TestCase):
             self.assertEqual(payload[:2], b"\x00\x04")
             self.assertEqual(payload[2:4], block_num.to_bytes(2))
 
-            if len(block) == 516: block_num += 1
+            if len(block) == 516:
+                block_num += 1
 
         # Ensure that we received final ACK for last block
-        self.assertEqual(block_num, self.last_block_num(os.path.join(tftp.UPLOAD_DIR, 'garden-verses.txt')))
+        self.assertEqual(
+            block_num,
+            self.last_block_num(os.path.join(tftp.UPLOAD_DIR, "garden-verses.txt")),
+        )
 
         # TODO: Investigate potential race condition; Sometimes the file doesn't exist at this line!!
-        with open(os.path.join(tftp.UPLOAD_DIR, 'garden-verses.txt'), 'r') as older_file:
-            with open(os.path.join(tftp.DOWNLOAD_DIR, 'garden-verses.txt'), 'r') as newer_file:
+        with open(
+            os.path.join(tftp.UPLOAD_DIR, "garden-verses.txt"), "r", encoding="utf8"
+        ) as older_file:
+            with open(
+                os.path.join(tftp.DOWNLOAD_DIR, "garden-verses.txt"),
+                "r",
+                encoding="utf8",
+            ) as newer_file:
                 self.assertEqual(older_file.read()[:200], newer_file.read()[:200])
 
         # clean up
@@ -997,22 +1008,33 @@ class ServerBehaviourTests(unittest.TestCase):
             self.assertEqual(server_address, initial_server_address)
             self.assertNotEqual(server_port, tftp.KNOWN_PORT)
 
-
-            if block_num < self.last_block_num(os.path.join(tftp.UPLOAD_DIR, "garden-verses.txt")):
+            if block_num < self.last_block_num(
+                os.path.join(tftp.UPLOAD_DIR, "garden-verses.txt")
+            ):
                 evil_client.sendto(block, (server_address, server_port))
                 evil_payload = evil_client.recv(1024)
-                self.assertEqual(evil_payload[:2], b"\x00\x05") # ERROR type
+                self.assertEqual(evil_payload[:2], b"\x00\x05")  # ERROR type
 
-            self.assertEqual(payload[:2], b"\x00\x04") # payload should be ACK type
+            self.assertEqual(payload[:2], b"\x00\x04")  # payload should be ACK type
             self.assertEqual(payload[2:4], block_num.to_bytes(2))
 
-            if len(block) == 516: block_num += 1
+            if len(block) == 516:
+                block_num += 1
 
         # Ensure that we received final ACK for last block
-        self.assertEqual(block_num, self.last_block_num(os.path.join(tftp.UPLOAD_DIR, 'garden-verses.txt')))
+        self.assertEqual(
+            block_num,
+            self.last_block_num(os.path.join(tftp.UPLOAD_DIR, "garden-verses.txt")),
+        )
 
-        with open(os.path.join(tftp.UPLOAD_DIR, 'garden-verses.txt'), 'r') as older_file:
-            with open(os.path.join(tftp.DOWNLOAD_DIR, 'garden-verses.txt'), 'r') as newer_file:
+        with open(
+            os.path.join(tftp.UPLOAD_DIR, "garden-verses.txt"), "r", encoding="utf8"
+        ) as older_file:
+            with open(
+                os.path.join(tftp.DOWNLOAD_DIR, "garden-verses.txt"),
+                "r",
+                encoding="utf8",
+            ) as newer_file:
                 self.assertEqual(older_file.read()[:200], newer_file.read()[:200])
 
         # clean up

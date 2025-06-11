@@ -496,14 +496,19 @@ class Server:
 
         while True:
             try:
-                block, (received_address, received_port) = sock.recvfrom(MAX_MESSAGE_LEN)
+                block, (received_address, received_port) = sock.recvfrom(
+                    MAX_MESSAGE_LEN
+                )
             except TimeoutError:
                 print("server WRQ: timed out waiting for a block")
                 sock.close()
                 return
 
             if (received_address, received_port) != (client_address, client_port):
-                sock.sendto(create_error_packet(ErrorCodes.UNKNOWN_TID), (received_address, received_port))
+                sock.sendto(
+                    create_error_packet(ErrorCodes.UNKNOWN_TID),
+                    (received_address, received_port),
+                )
                 continue
 
             # Strip TFTP header

@@ -934,6 +934,7 @@ class ServerBehaviourTests(unittest.TestCase):
         # Ensure that we received final ACK for last block
         self.assertEqual(block_num, self.last_block_num(os.path.join(tftp.UPLOAD_DIR, 'garden-verses.txt')))
 
+        # TODO: Investigate potential race condition; Sometimes the file doesn't exist at this line!!
         with open(os.path.join(tftp.UPLOAD_DIR, 'garden-verses.txt'), 'r') as older_file:
             with open(os.path.join(tftp.DOWNLOAD_DIR, 'garden-verses.txt'), 'r') as newer_file:
                 self.assertEqual(older_file.read()[:200], newer_file.read()[:200])
@@ -943,11 +944,18 @@ class ServerBehaviourTests(unittest.TestCase):
         t.join()
         client.close()
 
-    def test_decline_wrq_file_exists(self):
+    def test_data_wrong_source_port(self):
         """
-        Server will reply with an error to a WRQ for an existing file.
+        Server will reply with an error to messages from the wrong TID,
+        in the middle of processing a WRQ.
+        Server counterpart to `Client.test_ack_wrong_source_port`.
         """
-        # TODO : make WRQ for "doc.txt", should be rejected b/c it already exists.
+        # Delete file if left over from aborted test
+        try:
+            os.remove(tftp.DOWNLOAD_DIR + "garden-verses.txt")
+        except FileNotFoundError:
+            pass
+
         t = Thread(target=self.run_server)
         t.start()
         wait_for_udp_port("localhost", tftp.KNOWN_PORT)
@@ -955,7 +963,76 @@ class ServerBehaviourTests(unittest.TestCase):
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.bind(("0.0.0.0", 0))
 
-        # Send wrq and expect ACK 0
+        # This socket sends "distracting" messages that are from the wrong port
+        evil_client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        evil_client.bind(("0.0.0.0", 0))
+        evil_client.settimeout(2.0)
+
+        # Send wrq from client and expect ACK 0
+        wrq = tftp.create_connection_packet("w", "garden-verses.txt")
+
+        client.settimeout(2.0)
+        client.sendto(wrq, ("localhost", tftp.KNOWN_PORT))
+
+        payload, (initial_server_address, initial_server_port) = client.recvfrom(1024)
+
+        self.assertEqual(payload, b"\x00\x04\x00\x00")
+
+        # Send blocks and expect ACK 1 to ACK N
+        buf = bytes(0)
+        block_num = 1
+        with open(
+            os.path.join(tftp.UPLOAD_DIR, "garden-verses.txt"), "r", encoding="utf8"
+        ) as file:
+            buf += bytes(file.read(), encoding="utf8")
+
+        server_address, server_port = initial_server_address, initial_server_port
+
+        while len(buf) > 0:
+            block = tftp.create_data_packet(block_num, buf[:512])
+            buf = buf[512:]
+            client.sendto(block, (server_address, server_port))
+            payload, (server_address, server_port) = client.recvfrom(1024)
+
+            self.assertEqual(server_address, initial_server_address)
+            self.assertNotEqual(server_port, tftp.KNOWN_PORT)
+
+
+            if block_num < self.last_block_num(os.path.join(tftp.UPLOAD_DIR, "garden-verses.txt")):
+                evil_client.sendto(block, (server_address, server_port))
+                evil_payload = evil_client.recv(1024)
+                self.assertEqual(evil_payload[:2], b"\x00\x05") # ERROR type
+
+            self.assertEqual(payload[:2], b"\x00\x04") # payload should be ACK type
+            self.assertEqual(payload[2:4], block_num.to_bytes(2))
+
+            if len(block) == 516: block_num += 1
+
+        # Ensure that we received final ACK for last block
+        self.assertEqual(block_num, self.last_block_num(os.path.join(tftp.UPLOAD_DIR, 'garden-verses.txt')))
+
+        with open(os.path.join(tftp.UPLOAD_DIR, 'garden-verses.txt'), 'r') as older_file:
+            with open(os.path.join(tftp.DOWNLOAD_DIR, 'garden-verses.txt'), 'r') as newer_file:
+                self.assertEqual(older_file.read()[:200], newer_file.read()[:200])
+
+        # clean up
+        os.remove(tftp.DOWNLOAD_DIR + "garden-verses.txt")
+        t.join()
+        client.close()
+        evil_client.close()
+
+    def test_decline_wrq_file_exists(self):
+        """
+        Server will reply with an error to a WRQ for an existing file.
+        """
+        t = Thread(target=self.run_server)
+        t.start()
+        wait_for_udp_port("localhost", tftp.KNOWN_PORT)
+
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        client.bind(("0.0.0.0", 0))
+
+        # make WRQ for "doc.txt", should be rejected b/c it already exists.
         wrq = tftp.create_connection_packet("w", "doc.txt")
 
         client.settimeout(2.0)

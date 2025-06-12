@@ -152,8 +152,58 @@ OPERATION_TIMEOUT = 0.5
 OPERATION_ATTEMPTS = 5
 MAX_MESSAGE_LEN = 516
 
+class TftpEndpoint:
+    def receive_ack(self):
+        """
+        Receives acknowledgement or raises exception within set timeout.
+        Assumes block num set at point of call, increments it if
+        acknowledgment successfully received. Returns
+        (new block num, (server addr, server port)) for success, raises
+        exceptions for various types of failures.
+        """
+        while True:
+            # Assume blocknum is set at point of call.
+            if self.block_num is None:
+                raise IOError("Block number was not set before receiveAck called")
 
-class Client:
+            # Wait for an ack block for current blocknum.
+            # Use select with specified timeout.
+            # Raise IOError for timeout
+            r = select.select([self.sock], [], [], OPERATION_TIMEOUT)[0]
+
+            # Nothing ready to read within time => timeout
+            if r == []:
+                raise IOError("No ack received in timeout")
+
+            # Get actual packet and check contents
+            payload, (server_address, server_port) = self.sock.recvfrom(MAX_MESSAGE_LEN)
+
+            # TODO: Abort transfer if error packet received
+
+            # print(f'Have dest port {self.destination_port},'
+            # ' Received packet from {server_port}, {payload[:50]}')
+
+            if self.block_num == 0:
+                self.destination_port = server_port
+
+            # wrong TID => send error packet
+            if server_port != self.destination_port:
+                self.sock.sendto(
+                    create_error_packet(ErrorCodes.UNKNOWN_TID),
+                    (server_address, server_port),
+                )
+                continue
+
+            # Handle payload nt being an ACK packet of expected block num
+            if payload == create_ack_packet(self.block_num):
+                self.block_num += 1
+                return (self.block_num, (server_address, server_port))
+
+            raise IOError(
+                f"Received something other than expected ACK {self.block_num}"
+            )
+
+class Client(TftpEndpoint):
     """
     TFTP client. Keeps track of connection state such as current block num and packet to retransmit.
     """
@@ -236,56 +286,6 @@ class Client:
             raise IOError(f"Block num {self.block_num} not 1 after receiving ack 0")
 
         return True
-
-    def receive_ack(self):
-        """
-        Receives acknowledgement or raises exception within set timeout.
-        Assumes block num set at point of call, increments it if
-        acknowledgment successfully received. Returns
-        (new block num, (server addr, server port)) for success, raises
-        exceptions for various types of failures.
-        """
-        while True:
-            # Assume blocknum is set at point of call.
-            if self.block_num is None:
-                raise IOError("Block number was not set before receiveAck called")
-
-            # Wait for an ack block for current blocknum.
-            # Use select with specified timeout.
-            # Raise IOError for timeout
-            r = select.select([self.sock], [], [], OPERATION_TIMEOUT)[0]
-
-            # Nothing ready to read within time => timeout
-            if r == []:
-                raise IOError("No ack received in timeout")
-
-            # Get actual packet and check contents
-            payload, (server_address, server_port) = self.sock.recvfrom(MAX_MESSAGE_LEN)
-
-            # TODO: Abort transfer if error packet received
-
-            # print(f'Have dest port {self.destination_port},'
-            # ' Received packet from {server_port}, {payload[:50]}')
-
-            if self.block_num == 0:
-                self.destination_port = server_port
-
-            # wrong TID => send error packet
-            if server_port != self.destination_port:
-                self.sock.sendto(
-                    create_error_packet(ErrorCodes.UNKNOWN_TID),
-                    (server_address, server_port),
-                )
-                continue
-
-            # Handle payload nt being an ACK packet of expected block num
-            if payload == create_ack_packet(self.block_num):
-                self.block_num += 1
-                return (self.block_num, (server_address, server_port))
-
-            raise IOError(
-                f"Received something other than expected ACK {self.block_num}"
-            )
 
     def receive(self):
         """
@@ -392,7 +392,7 @@ class Client:
             return False
 
 
-class Server:
+class Server(TftpEndpoint):
     """
     TFTP server. Listens for connections and handles them in a new thread.
     """

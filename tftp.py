@@ -23,6 +23,7 @@ import select
 import socket
 import sys
 from threading import Thread, Event
+from abc import ABC
 
 MODES = ["netascii", "octet", "mail"]
 
@@ -113,14 +114,14 @@ class ErrorCodes:
     Enumeration of TFTP error types.
     """
 
-    NOT_DEFINED = int(0).to_bytes(2)
-    FILE_NOT_FOUND = int(1).to_bytes(2)
-    ACCESS_VIOLATION = int(2).to_bytes(2)
-    DISK_FULL = int(3).to_bytes(2)
-    ILLEGAL_OPERATION = int(4).to_bytes(2)
-    UNKNOWN_TID = int(5).to_bytes(2)
-    FILE_EXISTS = int(6).to_bytes(2)
-    NO_SUCH_USER = int(7).to_bytes(2)
+    NOT_DEFINED = int(0).to_bytes(2, byteorder="big")
+    FILE_NOT_FOUND = int(1).to_bytes(2, byteorder="big")
+    ACCESS_VIOLATION = int(2).to_bytes(2, byteorder="big")
+    DISK_FULL = int(3).to_bytes(2, byteorder="big")
+    ILLEGAL_OPERATION = int(4).to_bytes(2, byteorder="big")
+    UNKNOWN_TID = int(5).to_bytes(2, byteorder="big")
+    FILE_EXISTS = int(6).to_bytes(2, byteorder="big")
+    NO_SUCH_USER = int(7).to_bytes(2, byteorder="big")
 
 
 def create_error_packet(code: bytes, error_message: str = ""):
@@ -128,7 +129,7 @@ def create_error_packet(code: bytes, error_message: str = ""):
     Creates a formatted data packet ready to send through UDP.
     """
 
-    if code not in [x.to_bytes(2) for x in range(0, 7 + 1)]:
+    if code not in [x.to_bytes(2, byteorder="big") for x in range(0, 7 + 1)]:
         raise ValueError(
             "Error code should be a number in the range [1,7] represnted as 2 bytes."
         )
@@ -140,15 +141,17 @@ def create_error_packet(code: bytes, error_message: str = ""):
 
     return err
 
+
 def find_error_type(code: bytes):
     """
     Retrieves, from ErrorCodes, the name of the given error code,
     or raises a ValueError.
     """
     try:
-        return { v: k for k, v in vars(ErrorCodes).items() }[code]
+        return {v: k for k, v in vars(ErrorCodes).items()}[code]
     except KeyError:
-        raise ValueError(f'Meaning of error code {code} is unknown!')
+        raise ValueError(f"Meaning of error code {code} is unknown!")
+
 
 # The "known port" the server is initially contacted on.
 # The RFC specifies 69, but if we use a port above 1000
@@ -161,8 +164,14 @@ OPERATION_TIMEOUT = 0.5
 OPERATION_ATTEMPTS = 5
 MAX_MESSAGE_LEN = 516
 
-class TftpEndpoint:
-    def receive_ack(self, block_num):
+
+class TftpEndpoint(ABC):
+    """
+    Abstract superclass of both Client and Server which provides some concrete 
+    methods.
+    """
+
+    def receive_ack(self, block_num, sock):
         """
         Receives acknowledgement or raises exception within set timeout.
         Assumes block num set at point of call, increments it if
@@ -178,24 +187,26 @@ class TftpEndpoint:
             # Wait for an ack block for current blocknum.
             # Use select with specified timeout.
             # Raise IOError for timeout
-            r = select.select([self.sock], [], [], OPERATION_TIMEOUT)[0]
+            r = select.select([sock], [], [], OPERATION_TIMEOUT)[0]
 
             # Nothing ready to read within time => timeout
             if r == []:
                 raise IOError("No ack received in timeout")
 
             # Get actual packet and check contents
-            payload, (server_address, server_port) = self.sock.recvfrom(MAX_MESSAGE_LEN)
+            payload, (server_address, server_port) = sock.recvfrom(MAX_MESSAGE_LEN)
 
             if payload[:2] == Opcodes.ERROR:
-                raise IOError(f"Error received: {payload} {find_error_type(payload[2:4])}")
+                raise IOError(
+                    f"Error received: {payload} {find_error_type(payload[2:4])}"
+                )
 
             if block_num == 0:
                 self.destination_port = server_port
 
             # wrong TID => send error packet
             if server_port != self.destination_port:
-                self.sock.sendto(
+                sock.sendto(
                     create_error_packet(ErrorCodes.UNKNOWN_TID),
                     (server_address, server_port),
                 )
@@ -206,9 +217,8 @@ class TftpEndpoint:
                 block_num += 1
                 return (block_num, (server_address, server_port))
 
-            raise IOError(
-                f"Received something other than expected ACK {block_num}"
-            )
+            raise IOError(f"Received something other than expected ACK {block_num}")
+
 
 class Client(TftpEndpoint):
     """
@@ -281,7 +291,9 @@ class Client(TftpEndpoint):
             self.request_connection("w", address, filename)
 
             # Raises IOErrors for errors or timeout
-            blk, (self.destination_address, self.destination_port) = self.receive_ack(self.block_num)
+            blk, (self.destination_address, self.destination_port) = self.receive_ack(
+                self.block_num, self.sock
+            )
             self.block_num = blk
             # If the proper ack received, blk is now 1
             if blk == 1:
@@ -366,7 +378,7 @@ class Client(TftpEndpoint):
 
                 # Await acknowledgment
                 # FIXME: Redundant check
-                blk = self.receive_ack(self.block_num)[0]
+                blk = self.receive_ack(self.block_num, self.sock)[0]
                 self.block_num = blk
                 if blk == self.block_num:
                     break

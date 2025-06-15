@@ -363,14 +363,14 @@ class Client(TftpEndpoint):
 
         while sent < to_send:
             # Create a block
-            datablock = create_data_packet(self.block_num, buffer[:512])
+            data_block = create_data_packet(self.block_num, buffer[:512])
 
             # Attempt to send this block OPERATION_ATTEMPTS times
             block_attempts = 0
 
             while block_attempts < OPERATION_ATTEMPTS:
                 self.sock.sendto(
-                    datablock, (self.destination_address, self.destination_port)
+                    data_block, (self.destination_address, self.destination_port)
                 )
 
                 sent += len(buffer[:512])

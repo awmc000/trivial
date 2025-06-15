@@ -21,6 +21,8 @@ transported quickly and reliably using the Trivial File Transfer Protocol.
     is not allowed to read.
     - `share/unreadable.txt` is a text file with 000 permissions made for this purpose.
 - Each host running the program has both the client and server. It is a single application used via CLI.
+- Considering adding a packet type which is used to check if the other endpoint is listening.
+    - like a health check/ping/throwaway message (nothing happens then life is good, else ICMP port unreachable received)
 
 ## Usage and example output
 

@@ -34,6 +34,7 @@ TUI_TEXT = {
     "send_failure": "failed to send file",
     "read_success": "read successfully!",
     "read_failure": "failed to read file",
+    "share_folder": "Files shared\t: {}",
 }
 
 
@@ -140,12 +141,10 @@ def main() -> int:
         while True:
             server.listen()
 
-    if len(sys.argv) == 2 and sys.argv[1] == "write":
-        print(f'files shared: {', '.join(files_shared())}')
-
     # Other commands take 3 arguments, read|write FILE_NAME IP_ADDRESS
     if len(sys.argv) < 4:
         print(TUI_TEXT["usage"])
+        print(TUI_TEXT["share_folder"].format(' '.join(files_shared())))
         return -1
 
     if command == "read":

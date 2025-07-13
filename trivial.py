@@ -19,6 +19,8 @@ trivial.py: terminal user interface
 """
 
 import sys
+from pathlib import Path
+
 from tftp import Client, Server
 
 TUI_TEXT = {
@@ -62,9 +64,17 @@ def is_ip_address(addr: str):
 
     return True
 
-def is_valid_file_path(path: str):
-    return True
+def files_shared():
+    share_dir = Path('./share')
+    files = list(share_dir.iterdir())
+    acceptable = [ f.name for f in files ]
+    return acceptable
 
+def is_valid_file_path(path: str):
+    """
+    Returns `True` if `path` is a valid filename.
+    """
+    return path in files_shared()
 
 def handle_bad_parameters():
     file_name = sys.argv[2]
@@ -129,6 +139,9 @@ def main() -> int:
         server = Server()
         while True:
             server.listen()
+
+    if len(sys.argv) == 2 and sys.argv[1] == "write":
+        print(f'files shared: {', '.join(files_shared())}')
 
     # Other commands take 3 arguments, read|write FILE_NAME IP_ADDRESS
     if len(sys.argv) < 4:

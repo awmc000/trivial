@@ -36,8 +36,31 @@ TUI_TEXT = {
 
 
 def is_ip_address(addr: str):
-    return False
+    segments = addr.split(".")
 
+    if len(segments) != 4:
+        return False
+
+    for seg in segments:
+
+        # Fail an empty segment
+        if not seg:
+            return False
+
+        # Fail if non-number
+        if not seg.isnumeric():
+            return False
+
+        # Fail if there is zero-padding
+        if seg[0] == "0" and len(seg) > 1:
+            return False
+
+        # Fail if number is out of bounds
+        value = int(seg)
+        if value < 0 or value > 255:
+            return False
+
+    return True
 
 def is_valid_file_path(path: str):
     return True

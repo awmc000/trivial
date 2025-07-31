@@ -88,7 +88,7 @@ def create_data_packet(block_number: int, data: bytes):
         )
 
     pkt = Opcodes.DATA
-    pkt += block_number.to_bytes(2)
+    pkt += block_number.to_bytes(2, byteorder="big")
     pkt += data
 
     return pkt

@@ -104,7 +104,7 @@ def create_ack_packet(block_number: int):
         )
 
     ack = Opcodes.ACK
-    ack += block_number.to_bytes(2)
+    ack += block_number.to_bytes(2, byteorder="big")
 
     return ack
 

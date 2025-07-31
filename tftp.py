@@ -583,14 +583,12 @@ class Server(TftpEndpoint):
         to_send = len(buf)
         while sent < to_send:
             # Create data packet
-            data_packet = create_data_packet(block_num, buf[:512])
+            data_packet = create_data_packet(block_num, buf[sent:sent+512])
 
             # Send to client
             sock.sendto(data_packet, (client_address, client_port))
 
-            # print(f'server: sent data packet "{data_packet}"')
-
-            # Await acknowledgment
+            # TODO: Await acknowledgment
 
             # Update counter
             sent += len(data_packet[4:])

@@ -351,8 +351,8 @@ class Client(TftpEndpoint):
             self.receive()
 
         # Save the file
-        with open(os.path.join(DOWNLOAD_DIR, filename), "+w", encoding="utf8") as file:
-            file.write(str(self.buffer, encoding="utf8"))
+        with open(os.path.join(DOWNLOAD_DIR, filename), "wb") as file:
+            file.write(self.buffer)
 
         return True
 
@@ -401,8 +401,8 @@ class Client(TftpEndpoint):
         if not os.path.isfile(UPLOAD_DIR + filename):
             return False
 
-        with open(os.path.join(UPLOAD_DIR, filename), "r+", encoding="utf8") as file:
-            buf = bytes(file.read(), encoding="utf8")
+        with open(os.path.join(UPLOAD_DIR, filename), "rb") as file:
+            buf = file.read()
 
         # Make a write request
         self.request_write(address, filename)
@@ -543,8 +543,8 @@ class Server(TftpEndpoint):
             if len(block_content) < 512:
                 break
 
-        with open(DOWNLOAD_DIR + filename, "w", encoding="utf8") as file:
-            file.write(str(buf, encoding="utf8"))
+        with open(DOWNLOAD_DIR + filename, "wb") as file:
+            file.write(buf)
 
         sock.close()
 
@@ -565,8 +565,8 @@ class Server(TftpEndpoint):
         # open file into a buffer
         buf = None
         try:
-            with open(filename, "r", encoding="utf8") as file:
-                buf = bytes(file.read(), encoding="utf8")
+            with open(filename, "rb") as file:
+                buf = file.read()
         except FileNotFoundError:
             sock.sendto(
                 create_error_packet(ErrorCodes.FILE_NOT_FOUND),

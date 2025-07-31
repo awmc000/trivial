@@ -20,6 +20,8 @@ trivial.py: terminal user interface
 
 import sys
 from pathlib import Path
+import threading
+import time
 
 from tftp import Client, Server
 
@@ -39,6 +41,10 @@ TUI_TEXT = {
 
 
 def is_ip_address(addr: str):
+
+    if addr == "localhost":
+        return True
+
     segments = addr.split(".")
 
     if len(segments) != 4:
@@ -92,9 +98,7 @@ def handle_bad_parameters():
     return (file_name, ip_address)
 
 
-def handle_read():
-    client = Client()
-
+def handle_read(client = Client()):
     try:
         file_name, ip_address = handle_bad_parameters()
     except TypeError:
@@ -110,8 +114,7 @@ def handle_read():
     return 0
 
 
-def handle_write():
-    client = Client()
+def handle_write(client = Client()):
 
     try:
         file_name, ip_address = handle_bad_parameters()
@@ -126,6 +129,15 @@ def handle_write():
     print(TUI_TEXT["send_failure"])
     return 0
 
+def check_client_loading(client: Client, period: float):
+    """
+    Meant to be called as a separate thread.
+    Given a reference to a client, and a period seconds as float, 
+    checks its progress periodically and prints a loading bar.
+    """
+    while client.block_num and client.block_num < 100:
+        print(f'Client block num: \t{client.block_num}')
+        time.sleep(period)
 
 def main() -> int:
 
@@ -147,11 +159,20 @@ def main() -> int:
         print(TUI_TEXT["share_folder"].format(' '.join(files_shared())))
         return -1
 
+    client = Client()
+
     if command == "read":
-        return handle_read()
+        # t = threading.Thread(target=check_client_loading, args=[client, 0.100])
+        # t.start()
+        res = handle_read()
+        # t.join()
+        return res
 
     if command == "write":
-        return handle_write()
+        # t = threading.Thread(target=check_client_loading, args=[client, 0.100])
+        # t.start()
+        res = handle_write()
+        # t.join()
 
     return 0
 

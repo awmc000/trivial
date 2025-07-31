@@ -227,7 +227,7 @@ class Client(TftpEndpoint):
 
     def __init__(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind(("localhost", 0))
+        self.sock.bind(("", 0))
 
         # This is the source port or source TID we will put in datagrams
         self.source_port = self.sock.getsockname()[1]
@@ -248,7 +248,10 @@ class Client(TftpEndpoint):
         """
         req = create_connection_packet(request_type, filename)
 
-        self.sock.sendto(req, (address, KNOWN_PORT))
+        print(f'self.sock: {self.sock}')
+
+        print(f'arguments: {req}, {(address, KNOWN_PORT)}, {repr(address)}')
+        self.sock.sendto(req, (str(address), int(KNOWN_PORT)))
         self.destination_address = address
 
     def request_read(self, address, filename):
@@ -420,7 +423,7 @@ class Server(TftpEndpoint):
     def __init__(self):
         # print('server: creating listener')
         self.listener_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.listener_sock.bind(("localhost", KNOWN_PORT))
+        self.listener_sock.bind(("", KNOWN_PORT))
 
         # Signal that listener is bound, for test purposes
         self.listener_ready = Event()
@@ -493,7 +496,7 @@ class Server(TftpEndpoint):
 
         # Create a server socket specific to the transaction served by this thread
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind(("localhost", 0))
+        sock.bind(("", 0))
         sock.settimeout(2.0)
 
         # Return a 6 FILE EXISTS error if there's already a file by that name in /downloaded
@@ -557,7 +560,7 @@ class Server(TftpEndpoint):
 
         # create a server socket specific to the transaction served by this thread
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind(("localhost", 0))
+        sock.bind(("", 0))
 
         # open file into a buffer
         buf = None
